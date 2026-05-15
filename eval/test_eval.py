@@ -118,7 +118,7 @@ def main() -> None:
     p.add_argument("--data-dir", default="/media/donceykong/doncey_ssd_02/datasets/")
     p.add_argument("--dataset", default="kitti360")
     p.add_argument("--sequence", default="2013_05_28_drive_0000_sync")
-    p.add_argument("--prefix", default="in_domain/vanilla")
+    p.add_argument("--prefix", default="in_domain/osm_bki")
     args = p.parse_args()
 
     eval_dir = os.path.join(

@@ -3,7 +3,7 @@
 /**:
   ros__parameters:
     # Root data directory; if empty, use package local data dir (e.g. <pkg>/data).
-    data_root: "/media/donceykong/doncey_ssd_011/datasets/"
+    data_root: "/media/donceykong/doncey_ssd_02/datasets/"
 
     # Map information
     resolution: 0.5
@@ -15,31 +15,31 @@
     num_class: 9
 
     # Information about range-finder data
-    scan_num: 1000   # How many scans to use
+    scan_num: 1000 #10000   # How many scans to use
     max_range: 200.0  # Sensor max range (m)
-    keyframe_dist: 5.0  # Minimum euclidean distance (m) between consecutive lidar poses to be considered a keyframe (0 = use every frame)
+    keyframe_dist: 10.0  # Minimum euclidean distance (m) between consecutive lidar poses to be considered a keyframe (0 = use every frame)
 
     # Dataset information: paths are derived from sequence_name + suffix (no repeated sequence in paths).
     dataset_name: kitti360
-    sequence_name: 2013_05_28_drive_0009_sync
+    sequence_name: 2013_05_28_drive_0000_sync
 
     # Path suffixes relative to sequence (full path = sequence_name/suffix). All under data/<dataset>/.
     input_data_suffix: velodyne_points/data
     lidar_pose_suffix: velodyne_poses.txt
-    input_label_suffix: inferred_labels/cenet_kitti360
+
+    input_label_suffix: gt_labels #inferred_labels/cenet_kitti360
+    inferred_use_multiclass: false
+    inferred_labels_key: kitti360   # "mcd", "semkitti", or "kitti360"
+
     gt_label_suffix: gt_labels
+    gt_use_multiclass: false    # We dont have soft gt labels, so this should always be false
+    gt_labels_key: kitti360     # This should be the same as dataset_name
 
-    evaluation_result_prefix: evaluations/in_domain/osm_bki_onehot_Bp_01.00_Bk_01.00
-    query: true
-
-    # Multiclass: per-class confidence scores (float16) vs single uint32 per point.
-    inferred_use_multiclass: false   # inferred labels from input_label_suffix
-    gt_use_multiclass: false         # GT labels from gt_label_suffix
-    inferred_labels_key: kitti360   # "mcd", "semkitti", or "kitti360" — *_to_common and learning_map_inv for inferred
-    gt_labels_key: kitti360              # "mcd", "semkitti", or "kitti360" — *_to_common and learning_map_inv for GT
+    evaluation_result_prefix: evaluations/ignore/cross_domain/osm_bki
+    query: false
 
     # Visualize semantic map resulting from OSM-BKI
-    publish_semantic_occ_map: false   # publish /occupied_cells_vis_array; other map topics are gated independently
+    publish_semantic_occ_map: true   # publish /occupied_cells_vis_array; other map topics are gated independently
 
     # Visualization: show OSM priors colored. Use semantic for class colors.
     # Options: osm_building, osm_road, osm_grassland, osm_tree, osm_parking, osm_fence,
@@ -94,7 +94,7 @@
     # OSM prior configuration 
     # --------------------------------
     # OSM file for voxel priors (path relative to data dir, or absolute). Must match osm_visualizer if using both.
-    osm_file: map_0009.osm
+    osm_file: map_0000.osm
     osm_origin_lat: 48.9843445
     osm_origin_lon: 8.4295857
 
@@ -106,10 +106,10 @@
     # To use inferred (model) labels as rows (optimize for OSM to correct inferred toward GT), add --use-inferred-row.
     # Then set osm_confusion_matrix_file to the output file.
     osm_confusion_matrix_file: osm_confusion_matrix_optimized_kitti360.yaml
-    osm_prior_strength: 1.0  # per-class kernel boost strength (0.0 = disabled)
-    osm_dirichlet_prior_strength: 1.0  # spatially varying Dirichlet prior from OSM (0.0 = uniform prior everywhere)
+    osm_prior_strength: 0.0  # per-class kernel boost strength (0.0 = disabled)
+    osm_dirichlet_prior_strength: 0.0  # spatially varying Dirichlet prior from OSM (0.0 = uniform prior everywhere)
     osm_scan_radius_extension: 1.5  # multiply scan's max XY extent by this factor for OSM geometry pre-filtering (1.0 = exact, >1.0 = margin)
-    osm_height_filtering: true  # use height-based filtering for OSM priors
+    osm_height_filtering: false  # use height-based filtering for OSM priors
 
     # --- Gaussian height filter parameters (active when osm_height_filtering: true) ---
     height_kernel_lambda: 1.0        # blend weight (0 = disabled, 1 = full gating)
@@ -119,13 +119,19 @@
     # Per-common-class μ / τ (size == num_class; order matches labels_common.yaml:
     # 0 unlabeled, 1 road, 2 sidewalk, 3 parking, 4 building, 5 fence,
     # 6 vegetation, 7 vehicle, 8 terrain)
-    height_kernel_mu:        [1.485, -0.0011, 0.0682, 0.1366, 1.7499, 0.8846, 1.7249, 0.9045, 0.2722]
-    height_kernel_tau:       [100.0, 0.9315, 0.8144, 0.8657, 1.4464, 1.07, 1.4119, 1.0307, 0.9145]
-    height_kernel_dead_zone: [1.135, 0.4511, 0.4182, 0.4134, 0.9001, 0.6346, 0.8749, 0.5545, 0.5222]
 
+    # For kitti360 seq 0000
+    height_kernel_mu:        [1.2967, 0.0206, 0.0981, 0.1552, 1.4657, 0.8275, 1.4962, 0.848, 0.2725]
+    height_kernel_tau:       [100.0, 0.664, 0.6422, 0.7219, 1.2121, 0.8426, 1.2364, 0.8765, 0.6382]
+    height_kernel_dead_zone: [0.9533, 0.3294, 0.3481, 0.3948, 0.8157, 0.4775, 0.8462, 0.498, 0.3225]
+
+    # # For kitti360 seq 0009
+    # height_kernel_mu:        [1.0564, -0.0208, 0.0364, 0.0811, 1.6538, 0.7694, 1.2493, 0.8597, 0.1023]
+    # height_kernel_tau:       [100.0, 0.3512, 0.3331, 0.377, 0.9531, 0.6312, 0.9901, 0.6291, 0.6475]
+    # height_kernel_dead_zone: [0.8936, 0.1708, 0.1864, 0.2311, 0.6962, 0.3806, 0.6993, 0.3903, 0.3477]
 
     # --------------------------------
-    # OSM visualizer (RViz) — same file as above; paths resolved via data_dir from launch
+    # OSM visualizer (RViz). same file as above. Paths resolved via data_dir from launch
     # --------------------------------
     # If true, OSM file path is data_dir/sequence_name/osm_file; else data_dir/osm_file
     osm_in_sequence_dir: true

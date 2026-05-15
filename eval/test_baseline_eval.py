@@ -176,10 +176,10 @@ def main() -> None:
     p.add_argument("--dataset", default="kitti360")
     p.add_argument("--sequence", default="2013_05_28_drive_0000_sync")
     p.add_argument("--scan-suffix", default="velodyne_points/data")
-    p.add_argument("--softmax-suffix", default="inferred_labels/cenet_kitti360_softmax")
+    p.add_argument("--softmax-suffix", default="inferred_labels/cenet_mcd_terrain_softmax")
     p.add_argument("--gt-suffix", default="gt_labels")  # "gt_labels_terrain" for MCD
     p.add_argument("--eval-ref-suffix", default="evaluations/in_domain/vanilla")
-    p.add_argument("--inferred-key", default="kitti360")
+    p.add_argument("--inferred-key", default="mcd")
     p.add_argument("--gt-key", default="kitti360")
     p.add_argument("--labels-common", default=os.path.join(here, "../config/datasets/labels_common.yaml"))
     p.add_argument("--labels-inferred", default=os.path.join(here, "../config/datasets/labels_kitti360.yaml"))
