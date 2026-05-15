@@ -9,14 +9,14 @@
 osm_prior_columns: [roads, sidewalks, cycleways, parking, grasslands, trees, forest, buildings, fences]
 
 confusion_matrix:
-  1:  [  0.37,   0.07,   0.00,   0.05,   0.00,   0.00,   0.00,   0.00,   0.00]   # road
-  2:  [  0.09,   0.22,   0.21,   0.00,   0.00,   0.00,   0.13,   0.00,   0.00]   # sidewalk
-  3:  [  0.21,   0.20,   0.00,   0.65,   0.00,   0.00,   0.00,   0.00,   0.00]   # parking
-  4:  [  0.00,   0.00,   0.00,   0.00,   0.00,   0.00,   0.00,   1.00,   0.00]   # building
-  5:  [  0.00,   0.17,   0.00,   0.11,   0.02,   0.00,   0.00,   0.00,   0.97]   # fence
-  6:  [  0.05,   0.04,   0.79,   0.01,   0.14,   0.97,   0.77,   0.00,   0.00]   # vegetation
-  7:  [  0.29,   0.28,   0.00,   0.19,   0.00,   0.00,   0.00,   0.00,   0.00]   # vehicle
-  8:  [  0.00,   0.02,   0.00,   0.00,   0.84,   0.03,   0.10,   0.00,   0.03]   # terrain
+  1:  [  0.90,   0.10,   0.00,   0.00,   0.00,   0.00,   0.00,   0.00,   0.00]   # road
+  2:  [  0.10,   0.90,   0.00,   0.00,   0.00,   0.00,   0.00,   0.00,   0.00]   # sidewalk
+  3:  [  0.00,   0.00,   0.00,   0.60,   0.00,   0.00,   0.00,   0.00,   0.00]   # parking
+  4:  [  0.00,   0.00,   0.00,   0.00,   0.00,   0.00,   0.00,   1.00,   0.10]   # building
+  5:  [  0.00,   0.00,   0.00,   0.00,   0.00,   0.00,   0.00,   0.00,   0.80]   # fence
+  6:  [  0.00,   0.00,   0.00,   0.00,   0.50,   0.70,   0.50,   0.00,   0.10]   # vegetation
+  7:  [  0.00,   0.00,   0.00,   0.40,   0.00,   0.00,   0.00,   0.00,   0.00]   # vehicle
+  8:  [  0.00,   0.00,   0.00,   0.00,   0.50,   0.30,   0.50,   0.00,   0.00]   # terrain
 
 osm_class_map:
   roads: 0
@@ -28,6 +28,15 @@ osm_class_map:
   forest: 6
   buildings: 7
   fences: 8
+
+# Geometry parameters used for polygon-band OSM priors and visualization.
+osm_geometry_parameters:
+  osm_decay_meters: 2.000
+  road_width_meters: 2.000
+  sidewalk_width_meters: 2.000
+  cycleway_width_meters: 2.000
+  fence_width_meters: 0.600
+  tree_point_radius_meters: 5.000
 
 label_to_matrix_idx:
   1: 0
