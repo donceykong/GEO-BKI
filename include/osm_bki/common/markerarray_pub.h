@@ -17,11 +17,11 @@
 
 namespace osm_bki {
 
-    double interpolate( double val, double y0, double x0, double y1, double x1 ) {
+    inline double interpolate( double val, double y0, double x0, double y1, double x1 ) {
         return (val-x0)*(y1-y0)/(x1-x0) + y0;
     }
 
-    double base( double val ) {
+    inline double base( double val ) {
         if ( val <= -0.75 ) return 0;
         else if ( val <= -0.25 ) return interpolate( val, 0.0, -0.75, 1.0, -0.25 );
         else if ( val <= 0.25 ) return 1.0;
@@ -29,17 +29,17 @@ namespace osm_bki {
         else return 0.0;
     }
 
-    double red( double gray ) {
+    inline double red( double gray ) {
         return base( gray - 0.5 );
     }
-    double green( double gray ) {
+    inline double green( double gray ) {
         return base( gray );
     }
-    double blue( double gray ) {
+    inline double blue( double gray ) {
         return base( gray + 0.5 );
     }
     
-    std_msgs::msg::ColorRGBA JetMapColor(float gray) {
+    inline std_msgs::msg::ColorRGBA JetMapColor(float gray) {
       std_msgs::msg::ColorRGBA color;
       color.a = 1.0;
 
@@ -49,7 +49,7 @@ namespace osm_bki {
       return color;
     }
 
-    std_msgs::msg::ColorRGBA SemanticMapColor(int c) {
+    inline std_msgs::msg::ColorRGBA SemanticMapColor(int c) {
       std_msgs::msg::ColorRGBA color;
       color.a = 1.0;
 
@@ -79,7 +79,7 @@ namespace osm_bki {
       return color;
     }
 
-    std_msgs::msg::ColorRGBA SemanticKITTISemanticMapColor(int c) {
+    inline std_msgs::msg::ColorRGBA SemanticKITTISemanticMapColor(int c) {
       std_msgs::msg::ColorRGBA color;
       color.a = 1.0;
 
@@ -188,7 +188,7 @@ namespace osm_bki {
       return color;
     }
 
-    std_msgs::msg::ColorRGBA NCLTSemanticMapColor(int c) {
+    inline std_msgs::msg::ColorRGBA NCLTSemanticMapColor(int c) {
       std_msgs::msg::ColorRGBA color;
       color.a = 1.0;
 
@@ -267,7 +267,7 @@ namespace osm_bki {
       return color;
     }
 
-    std_msgs::msg::ColorRGBA KITTISemanticMapColor(int c) {
+    inline std_msgs::msg::ColorRGBA KITTISemanticMapColor(int c) {
       std_msgs::msg::ColorRGBA color;
       color.a = 1.0;
       
@@ -338,7 +338,7 @@ namespace osm_bki {
     }
 
 
-    std_msgs::msg::ColorRGBA heightMapColor(double h) {
+    inline std_msgs::msg::ColorRGBA heightMapColor(double h) {
 
         std_msgs::msg::ColorRGBA color;
         color.a = 1.0;

@@ -102,7 +102,7 @@ endif()
 include_directories(
   include/osm_bki/common
   include/osm_bki/mapping
-  include/osm_bki/dataset_devkit
+  include/osm_bki/dataset_utils
   ${OpenCV_INCLUDE_DIRS}
   ${EIGEN3_INCLUDE_DIRS}
   ${PCL_INCLUDE_DIRS}
@@ -118,9 +118,23 @@ set(MAPPING_SOURCE_FILES
     src/mapping/bkioctree_node.cpp
     src/mapping/bkioctree.cpp)
 
+# Dataset-agnostic pipeline (CommonUtils class and helpers)
+set(DATASET_UTILS_SOURCE_FILES
+    src/dataset_utils/common_utils.cpp
+    src/dataset_utils/node_setup.cpp)
+
+# Dataset-specific helpers (linked only into the corresponding node)
+set(MCD_DATASET_SOURCE_FILES
+    src/dataset_utils/mcd_utils.cpp)
+
+set(KITTI360_DATASET_SOURCE_FILES
+    src/dataset_utils/kitti360_utils.cpp)
+
 add_executable(mcd_node
   ${MAPPING_SOURCE_FILES}
   ${COMMON_SOURCE_FILES}
+  ${DATASET_UTILS_SOURCE_FILES}
+  ${MCD_DATASET_SOURCE_FILES}
   src/common/osm_visualizer.cpp
   src/mcd_node.cpp
 )
@@ -128,6 +142,8 @@ add_executable(mcd_node
 add_executable(kitti360_node
   ${MAPPING_SOURCE_FILES}
   ${COMMON_SOURCE_FILES}
+  ${DATASET_UTILS_SOURCE_FILES}
+  ${KITTI360_DATASET_SOURCE_FILES}
   src/common/osm_visualizer.cpp
   src/kitti360_node.cpp
 )

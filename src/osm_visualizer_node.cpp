@@ -5,13 +5,14 @@
 
 #include <rclcpp/rclcpp.hpp>
 #include <ament_index_cpp/get_package_share_directory.hpp>
-#include "osm_visualizer.h"
 #include <string>
 #include <fstream>
 #include <sstream>
 #include <vector>
 #include <Eigen/Dense>
 #include <yaml-cpp/yaml.h>
+
+#include "osm_visualizer.h"
 
 int main(int argc, char** argv) {
     rclcpp::init(argc, argv);
