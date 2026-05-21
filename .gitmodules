@@ -1,0 +1,3 @@
+[submodule "baselines/convbki/NeuralBKI"]
+	path = baselines/convbki/NeuralBKI
+	url = https://github.com/UMich-CURLY/NeuralBKI.git

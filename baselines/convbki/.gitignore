@@ -1,0 +1,11 @@
+# Staging trees produced by stage_inputs.py are reproducible from on-disk
+# inputs and can be large (symlinks to scans + converted labels/preds).
+staging/
+
+# Raw NeuralBKI output trees produced by run_convbki.py before conversion.
+# Kept as a working dir; useful artifacts are copied into raw_predictions/.
+nbki_runs/
+
+# Python bytecode from helper scripts.
+__pycache__/
+*.pyc
