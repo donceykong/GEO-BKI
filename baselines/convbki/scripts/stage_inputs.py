@@ -309,7 +309,14 @@ def stage(config_path: str, data_root_override: str | None = None) -> int:
     out_lbl = os.path.join(out_seq, "labels")
     out_pred = os.path.join(out_seq, "predictions_softmax")
     out_hard = os.path.join(out_seq, "predictions_hard")
-    for d in [out_velo, out_lbl, out_pred, out_hard]:
+    # predictions_softmax is ~60GB per KITTI-360 seq and unused when the
+    # experiment runs in hard-input mode; skip the write to keep disk
+    # usage in check across all 8 combos.
+    write_softmax = not bool(cfg.get("hard_input", False))
+    dirs_to_make = [out_velo, out_lbl, out_hard]
+    if write_softmax:
+        dirs_to_make.append(out_pred)
+    for d in dirs_to_make:
         os.makedirs(d, exist_ok=True)
 
     # Canonical 1-to-1 routing for hard labels: common -> single SemKITTI training class.
@@ -437,16 +444,17 @@ def stage(config_path: str, data_root_override: str | None = None) -> int:
             manifest["n_channels"] = int(K)
             print(f"Inferred K={K} channels from first CENet file; built routing table")
 
-        try:
-            pred20 = convert_softmax(in_pred, n_pts, channel_to_common, num_train_classes=20)
-        except ValueError as e:
-            manifest["skipped"].append({"stem": stem, "reason": str(e)})
-            pose_rows.pop()
-            staged_stems.pop()
-            os.remove(out_scan)
-            os.remove(os.path.join(out_lbl, f"{stem}.label"))
-            continue
-        pred20.astype(np.float32).tofile(os.path.join(out_pred, f"{stem}.label"))
+        if write_softmax:
+            try:
+                pred20 = convert_softmax(in_pred, n_pts, channel_to_common, num_train_classes=20)
+            except ValueError as e:
+                manifest["skipped"].append({"stem": stem, "reason": str(e)})
+                pose_rows.pop()
+                staged_stems.pop()
+                os.remove(out_scan)
+                os.remove(os.path.join(out_lbl, f"{stem}.label"))
+                continue
+            pred20.astype(np.float32).tofile(os.path.join(out_pred, f"{stem}.label"))
 
         # Hard labels: 9-class common argmax routed via canonical (no split).
         # Re-derive from CENet softmax instead of pred20 because pred20 has the
