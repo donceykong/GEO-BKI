@@ -18,7 +18,7 @@ set -uo pipefail
 
 REPO=/home/sgarimella34/OSM-BKI-ROS
 cd "$REPO"
-export OSM_BKI_DATA_ROOT=/media/sgarimella34/hercules-collect3/datasets
+export OSM_BKI_DATA_ROOT="${OSM_BKI_DATA_ROOT:-/media/sgarimella34/hercules-collect3/datasets}"
 PY=/home/sgarimella34/miniforge3/envs/Where2comm/bin/python
 
 mkdir -p baselines/convbki/logs baselines/convbki/results
@@ -81,7 +81,7 @@ for combo in "${COMBOS[@]}"; do
   # ---- stage ------------------------------------------------------------
   if [ ! -f "$staging/manifest.json" ]; then
     echo "[$combo] staging..." | tee -a "$ORCHESTRATOR_LOG"
-    python3 baselines/convbki/scripts/stage_inputs.py "$cfg" > "$log" 2>&1
+    $PY baselines/convbki/scripts/stage_inputs.py "$cfg" > "$log" 2>&1
     if [ $? -ne 0 ]; then
       echo "[$combo] STAGING FAILED (see $log)" | tee -a "$ORCHESTRATOR_LOG"
       continue
@@ -136,6 +136,16 @@ See $log for details. Remaining combos were not run.
 EOF
     break
   fi
+
+  # ---- cleanup ----------------------------------------------------------
+  # Predictions are archived in raw_predictions/, eval .txt files are
+  # written under <seq>/evaluations/convbki/, and raw_numbers.json holds
+  # the per-combo numbers. The staging tree and the raw .label predictions
+  # under nbki_runs/ are now redundant and would otherwise blow out the
+  # drive across 8 combos. Drop them once we've passed the floor.
+  echo "[$combo] cleanup: deleting staging tree and nbki_runs/<combo>" | tee -a "$ORCHESTRATOR_LOG"
+  rm -rf "$staging/sequences"
+  rm -rf "$output/sequences"
 
   echo "===== DONE $combo $(date) =====" | tee -a "$ORCHESTRATOR_LOG"
 done
