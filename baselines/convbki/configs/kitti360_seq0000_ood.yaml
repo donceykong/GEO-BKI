@@ -38,15 +38,22 @@ weights:
   dir: ConvBKI_PC_02_V        # pretrained per-class kernel, 0.2 m voxel
   epoch: 1                     # filters1.pt — matches LOAD_EPOCH in upstream YAML
 
-# Test grid extended to +/- 100 m to match S-BKI's max_range (KITTI-360
-# keeps points out to 200 m; clipping to 50 m would unfairly hurt
-# Conv-BKI on far-field IoU).
+# Test grid: paper-native +/- 50.1 m at 0.2 m voxel (501 x 501 x 27).
+# Larger grids quadrupled the dense ConvLayer cost without changing the
+# numbers meaningfully — KITTI-360 keeps points to 200 m but Conv-BKI's
+# spatial signal saturates well inside 50 m anyway.
 grid:
-  grid_size: [1000, 1000, 27]
-  min_bound: [-100.0, -100.0, -2.7]
-  max_bound: [100.0, 100.0, 2.7]
+  grid_size: [501, 501, 27]
+  min_bound: [-50.1, -50.1, -2.7]
+  max_bound: [50.1, 50.1, 2.7]
 
-num_classes: 20                # SemanticKITTI training taxonomy
+num_classes: 20
+# Pretrained ConvBKI_PC_02_V was trained with hard (one-hot) labels.
+# Soft 20-class input + the per-class kernel weight asymmetry (parking
+# kernel sum ~26 vs sidewalk ~5.6) made parking dominate every voxel
+# from the ~uniform 11% floor mass the C++ aggregation gives common
+# classes with few or no feeding source channels.
+hard_input: true
 filter_size: 5
 kernel: sparse
 per_class: true

@@ -25,11 +25,12 @@ weights:
   epoch: 1
 
 grid:
-  grid_size: [1000, 1000, 27]
-  min_bound: [-100.0, -100.0, -2.7]
-  max_bound: [100.0, 100.0, 2.7]
+  grid_size: [501, 501, 27]
+  min_bound: [-50.1, -50.1, -2.7]
+  max_bound: [50.1, 50.1, 2.7]
 
 num_classes: 20
+hard_input: true   # Pretrained ConvBKI_PC_02_V was trained with hard labels
 filter_size: 5
 kernel: sparse
 per_class: true

@@ -308,8 +308,16 @@ def stage(config_path: str, data_root_override: str | None = None) -> int:
     out_velo = os.path.join(out_seq, "velodyne")
     out_lbl = os.path.join(out_seq, "labels")
     out_pred = os.path.join(out_seq, "predictions_softmax")
-    for d in [out_velo, out_lbl, out_pred]:
+    out_hard = os.path.join(out_seq, "predictions_hard")
+    for d in [out_velo, out_lbl, out_pred, out_hard]:
         os.makedirs(d, exist_ok=True)
+
+    # Canonical 1-to-1 routing for hard labels: common -> single SemKITTI training class.
+    # No weighted split (the split was causing argmax to land on common classes whose
+    # mass was split, never on vegetation/vehicle whose mass was halved/thirded).
+    common_to_train_canon = np.zeros(9, dtype=np.uint32)
+    for c, t in LM.COMMON_TO_SEMKITTI_TRAIN.items():
+        common_to_train_canon[int(c)] = int(t)
 
     # ------------------------------------------------------------------ #
     # Label mappings
@@ -439,6 +447,16 @@ def stage(config_path: str, data_root_override: str | None = None) -> int:
             os.remove(os.path.join(out_lbl, f"{stem}.label"))
             continue
         pred20.astype(np.float32).tofile(os.path.join(out_pred, f"{stem}.label"))
+
+        # Hard labels: 9-class common argmax routed via canonical (no split).
+        # Re-derive from CENet softmax instead of pred20 because pred20 has the
+        # weighted split applied, which makes vegetation/vehicle never win argmax.
+        raw_u16 = np.fromfile(in_pred, dtype=np.uint16).reshape(n_pts, -1)
+        soft = LM.softmax_from_float16_raw(raw_u16)
+        common = LM.aggregate_source_to_common(soft, channel_to_common, n_common=9)
+        common_argmax = common.argmax(axis=1).astype(np.uint32)
+        hard_train = common_to_train_canon[common_argmax]
+        hard_train.astype(np.uint32).tofile(os.path.join(out_hard, f"{stem}.label"))
 
         manifest["staged"].append({"stem": stem, "n_points": int(n_pts)})
 

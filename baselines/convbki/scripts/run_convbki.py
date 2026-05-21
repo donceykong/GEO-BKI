@@ -60,7 +60,7 @@ def _setup_paths(nbki_root: str) -> None:
         sys.path.insert(0, HERE)
 
 
-def main(config_path: str) -> int:
+def main(config_path: str, hard: bool = False, limit: int | None = None) -> int:
     with open(config_path) as f:
         cfg = yaml.safe_load(f)
 
@@ -125,6 +125,19 @@ def main(config_path: str) -> int:
     num_classes = int(cfg["num_classes"])
     filter_size = int(cfg["filter_size"])
 
+    # Allow YAML or CLI to switch between soft (continuous) and hard (one-hot)
+    # input. The pretrained ConvBKI_PC_02_V kernel was trained with hard labels
+    # (from_continuous: False in the upstream ConvBKI_PerClass.yaml); soft input
+    # with our routing was causing the parking kernel (sum=26.7, vs sidewalk
+    # 5.6 / building 4.8) to dominate every voxel from the uniform-ish floor mass.
+    yaml_hard = bool(cfg.get("hard_input", False))
+    use_hard = hard or yaml_hard
+    pred_path = "predictions_hard" if use_hard else "predictions_softmax"
+    from_continuous = not use_hard
+    to_continuous = not use_hard
+    print(f"  input_format = {'hard (uint32 argmax)' if use_hard else 'soft (float32 N x 20)'}")
+    print(f"  pred_path    = {pred_path}")
+
     grid_params = {"grid_size": grid_size, "min_bound": min_bound, "max_bound": max_bound}
     ds = StagingKittiDataset(
         grid_params=grid_params,
@@ -134,9 +147,9 @@ def main(config_path: str) -> int:
         num_frames=1,
         use_aug=False,
         apply_transform=True,
-        from_continuous=True,
-        to_continuous=True,
-        pred_path="predictions_softmax",
+        from_continuous=from_continuous,
+        to_continuous=to_continuous,
+        pred_path=pred_path,
         num_classes=num_classes,
         remove_zero=False,
     )
@@ -169,7 +182,8 @@ def main(config_path: str) -> int:
     t0 = time.time()
     written = 0
 
-    for idx in range(len(ds)):
+    end = len(ds) if limit is None else min(len(ds), int(limit))
+    for idx in range(end):
         with torch.no_grad():
             pose, points, pred_labels, _gt, scene_id, frame_id = ds.get_test_item(idx, get_gt=False)
 
@@ -200,7 +214,7 @@ def main(config_path: str) -> int:
             current_scene = scene_id
             current_frame_id = frame_id
 
-        if (idx + 1) % 100 == 0 or idx + 1 == len(ds):
+        if (idx + 1) % 100 == 0 or idx + 1 == end:
             elapsed = time.time() - t0
             rate = (idx + 1) / elapsed if elapsed > 0 else 0
             print(f"  [{idx + 1}/{len(ds)}]  rate={rate:.2f} scans/s  elapsed={elapsed:.1f}s")
@@ -213,5 +227,12 @@ def main(config_path: str) -> int:
 if __name__ == "__main__":
     p = argparse.ArgumentParser(description=__doc__)
     p.add_argument("config", help="Per-experiment run YAML")
+    p.add_argument("--hard", action="store_true",
+                   help="Use hard (one-hot) inputs from predictions_hard/ instead of "
+                        "the soft N x 20 predictions_softmax/. Pretrained ConvBKI_PC_02_V "
+                        "was trained with hard labels, so this matches the model's "
+                        "training distribution.")
+    p.add_argument("--limit", type=int, default=None,
+                   help="Stop after this many scans (smoke testing).")
     args = p.parse_args()
-    sys.exit(main(args.config))
+    sys.exit(main(args.config, hard=args.hard, limit=args.limit))
