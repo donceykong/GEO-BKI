@@ -1,0 +1,56 @@
+# Conv-BKI experiment config: KITTI-360 seq 0000, OOD CENet (cenet_mcd_softmax).
+#
+# OOD = the dataset's "out-of-domain" upstream: KITTI-360 scans through
+# a CENet trained on MCD. This is the configuration the OSM-BKI launch
+# files use by default. ID is the sibling cenet_kitti360_softmax variant
+# (see kitti360_seq0000_id.yaml).
+#
+# Smoke test: this file is used for the parity check on a single scan
+# (no training, pretrained 20-class weights -> Conv-BKI -> 9-class common).
+
+experiment_name: kitti360_seq0000_ood
+
+# ---- Source data --------------------------------------------------------
+dataset: kitti360
+sequence_name: 2013_05_28_drive_0000_sync
+# data_root may be left null and supplied via --data-root or OSM_BKI_DATA_ROOT
+data_root: null
+
+input_data_suffix: velodyne_points/data
+lidar_pose_suffix: velodyne_poses.txt
+input_label_suffix: inferred_labels/cenet_mcd_softmax
+gt_label_suffix: gt_labels
+
+inferred_labels_key: mcd        # CENet was trained on MCD taxonomy
+gt_labels_key: kitti360         # GT is in KITTI-360 taxonomy
+
+# KITTI-360 mounts the Velodyne directly on the body frame; no extrinsic.
+calibration_file: ""
+
+# ---- Staging output -----------------------------------------------------
+staging_root: baselines/convbki/staging/kitti360_seq0000_ood
+
+# ---- Conv-BKI run -------------------------------------------------------
+output_root: baselines/convbki/nbki_runs/kitti360_seq0000_ood
+log_dir: baselines/convbki/logs
+
+weights:
+  dir: ConvBKI_PC_02_V        # pretrained per-class kernel, 0.2 m voxel
+  epoch: 1                     # filters1.pt — matches LOAD_EPOCH in upstream YAML
+
+# Test grid extended to +/- 100 m to match S-BKI's max_range (KITTI-360
+# keeps points out to 200 m; clipping to 50 m would unfairly hurt
+# Conv-BKI on far-field IoU).
+grid:
+  grid_size: [1000, 1000, 27]
+  min_bound: [-100.0, -100.0, -2.7]
+  max_bound: [100.0, 100.0, 2.7]
+
+num_classes: 20                # SemanticKITTI training taxonomy
+filter_size: 5
+kernel: sparse
+per_class: true
+compound: false
+ell: 0.5
+seed: 42
+device: cuda

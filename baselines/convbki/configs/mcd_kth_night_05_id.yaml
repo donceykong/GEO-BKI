@@ -1,0 +1,39 @@
+# Conv-BKI experiment config: MCD kth_night_05, ID CENet (cenet_mcd_softmax).
+
+experiment_name: mcd_kth_night_05_id
+
+dataset: mcd
+sequence_name: kth_night_05
+data_root: null
+
+input_data_suffix: lidar_bin/data
+lidar_pose_suffix: pose_inW.csv
+input_label_suffix: inferred_labels/cenet_mcd_softmax
+gt_label_suffix: gt_labels_terrain
+
+inferred_labels_key: mcd
+gt_labels_key: mcd
+
+calibration_file: ${OSM_BKI_DATA_ROOT}/mcd/hhs_calib.yaml
+
+staging_root: baselines/convbki/staging/mcd_kth_night_05_id
+output_root: baselines/convbki/nbki_runs/mcd_kth_night_05_id
+log_dir: baselines/convbki/logs
+
+weights:
+  dir: ConvBKI_PC_02_V
+  epoch: 1
+
+grid:
+  grid_size: [1000, 1000, 27]
+  min_bound: [-100.0, -100.0, -2.7]
+  max_bound: [100.0, 100.0, 2.7]
+
+num_classes: 20
+filter_size: 5
+kernel: sparse
+per_class: true
+compound: false
+ell: 0.5
+seed: 42
+device: cuda

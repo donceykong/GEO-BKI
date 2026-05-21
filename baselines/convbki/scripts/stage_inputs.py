@@ -241,9 +241,27 @@ def pose_row_12(T_4x4: np.ndarray) -> np.ndarray:
 # --------------------------------------------------------------------------- #
 
 
-def stage(config_path: str) -> int:
+def stage(config_path: str, data_root_override: str | None = None) -> int:
     with open(config_path) as f:
         cfg = yaml.safe_load(f)
+
+    # CLI / env override -> YAML field -> environment variable. The YAML may
+    # leave data_root null/empty and require a CLI flag or env var, so a single
+    # source-of-truth path covers all eight per-experiment configs.
+    if data_root_override:
+        cfg["data_root"] = data_root_override
+    elif not cfg.get("data_root"):
+        cfg["data_root"] = os.environ.get("OSM_BKI_DATA_ROOT", "")
+    # Expand ${VAR} / $VAR in any path-like field after the override is applied.
+    for k in ("data_root", "calibration_file", "staging_root", "nbki_root", "labels_common_yaml"):
+        if isinstance(cfg.get(k), str):
+            cfg[k] = os.path.expandvars(cfg[k])
+    if not cfg.get("data_root"):
+        print(
+            "ERROR: data_root not set. Provide it via the YAML, --data-root, or "
+            "the OSM_BKI_DATA_ROOT env var."
+        )
+        return 2
 
     dataset = cfg["dataset"]                    # "kitti360" or "mcd"
     sequence = cfg["sequence_name"]
@@ -475,8 +493,14 @@ def stage(config_path: str) -> int:
 def main() -> int:
     p = argparse.ArgumentParser(description=__doc__)
     p.add_argument("config", help="Per-sequence staging YAML")
+    p.add_argument(
+        "--data-root",
+        default=None,
+        help="Overrides data_root from the YAML (otherwise falls back to "
+        "OSM_BKI_DATA_ROOT env var).",
+    )
     args = p.parse_args()
-    return stage(args.config)
+    return stage(args.config, data_root_override=args.data_root)
 
 
 if __name__ == "__main__":

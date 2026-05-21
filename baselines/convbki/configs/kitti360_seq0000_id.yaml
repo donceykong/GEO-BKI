@@ -1,0 +1,43 @@
+# Conv-BKI experiment config: KITTI-360 seq 0000, ID CENet (cenet_kitti360_softmax).
+#
+# ID = "in-domain" upstream: KITTI-360 scans through a CENet that was
+# also trained on KITTI-360. The companion OOD variant is in the
+# kitti360_seq0000_ood.yaml.
+
+experiment_name: kitti360_seq0000_id
+
+dataset: kitti360
+sequence_name: 2013_05_28_drive_0000_sync
+data_root: null
+
+input_data_suffix: velodyne_points/data
+lidar_pose_suffix: velodyne_poses.txt
+input_label_suffix: inferred_labels/cenet_kitti360_softmax
+gt_label_suffix: gt_labels
+
+inferred_labels_key: kitti360
+gt_labels_key: kitti360
+
+calibration_file: ""
+
+staging_root: baselines/convbki/staging/kitti360_seq0000_id
+output_root: baselines/convbki/nbki_runs/kitti360_seq0000_id
+log_dir: baselines/convbki/logs
+
+weights:
+  dir: ConvBKI_PC_02_V
+  epoch: 1
+
+grid:
+  grid_size: [1000, 1000, 27]
+  min_bound: [-100.0, -100.0, -2.7]
+  max_bound: [100.0, 100.0, 2.7]
+
+num_classes: 20
+filter_size: 5
+kernel: sparse
+per_class: true
+compound: false
+ell: 0.5
+seed: 42
+device: cuda
