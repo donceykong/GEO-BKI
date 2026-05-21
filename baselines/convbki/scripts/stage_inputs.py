@@ -191,12 +191,15 @@ def convert_gt(
 def convert_softmax(
     softmax_path: str,
     n_points: int,
-    channel_to_train: np.ndarray,
+    channel_to_common: np.ndarray,
     num_train_classes: int = 20,
 ) -> np.ndarray:
     """Read CENet uint16 (float16) softmax buffer and return (N, num_train_classes) float32.
 
-    The buffer length must be n_points * K where K is inferred from file size.
+    Pipeline: float16 logits -> softmax -> 9-class common (C++-faithful sum
+    + average-by-count + renormalize) -> 20-class SemKITTI training
+    distribution (weighted split per COMMON_TO_SEMKITTI_TRAIN_WEIGHTED).
+    Buffer length must be n_points * K with K inferred from file size.
     """
     raw = np.fromfile(softmax_path, dtype=np.uint16)
     if raw.size == 0:
@@ -206,14 +209,14 @@ def convert_softmax(
             f"softmax size {raw.size} not divisible by n_points={n_points} for {softmax_path}"
         )
     K = raw.size // n_points
-    if channel_to_train.size != K:
+    if channel_to_common.size != K:
         raise ValueError(
-            f"channel_to_train has {channel_to_train.size} entries but softmax has {K} channels "
+            f"channel_to_common has {channel_to_common.size} entries but softmax has {K} channels "
             f"({softmax_path}); rebuild the routing table with the correct n_channels"
         )
     logits = raw.reshape(n_points, K)
     softmax = LM.softmax_from_float16_raw(logits)
-    return LM.aggregate_channels_to_semkitti_train(softmax, channel_to_train, num_train_classes)
+    return LM.aggregate_channels_to_semkitti_train(softmax, channel_to_common, num_train_classes)
 
 
 def lidar_to_world_kitti360(
@@ -317,8 +320,10 @@ def stage(config_path: str, data_root_override: str | None = None) -> int:
     raw_to_train_lut = LM.build_raw_gt_to_semkitti_train(gt_key, common_cfg)
 
     # Channel count differs per CENet variant; learn it from the first
-    # softmax file we encounter.
-    channel_to_train: np.ndarray | None = None
+    # softmax file we encounter. We carry the channel->common routing
+    # rather than channel->training-class because the staging-time split
+    # to 20 training columns is now a separate weighted step.
+    channel_to_common: np.ndarray | None = None
 
     # ------------------------------------------------------------------ #
     # Poses
@@ -406,7 +411,7 @@ def stage(config_path: str, data_root_override: str | None = None) -> int:
         gt_train.astype(np.uint32).tofile(os.path.join(out_lbl, f"{stem}.label"))
 
         # CENet softmax -> SemKITTI 20-class soft probs
-        if channel_to_train is None:
+        if channel_to_common is None:
             raw_pred = np.fromfile(in_pred, dtype=np.uint16)
             if raw_pred.size == 0 or raw_pred.size % n_pts != 0:
                 manifest["skipped"].append(
@@ -418,14 +423,14 @@ def stage(config_path: str, data_root_override: str | None = None) -> int:
                 os.remove(os.path.join(out_lbl, f"{stem}.label"))
                 continue
             K = raw_pred.size // n_pts
-            channel_to_train = LM.build_source_channel_to_semkitti_train(
+            channel_to_common = LM.build_source_channel_to_common(
                 inferred_key, common_cfg, K
             )
             manifest["n_channels"] = int(K)
             print(f"Inferred K={K} channels from first CENet file; built routing table")
 
         try:
-            pred20 = convert_softmax(in_pred, n_pts, channel_to_train, num_train_classes=20)
+            pred20 = convert_softmax(in_pred, n_pts, channel_to_common, num_train_classes=20)
         except ValueError as e:
             manifest["skipped"].append({"stem": stem, "reason": str(e)})
             pose_rows.pop()
@@ -465,12 +470,16 @@ def stage(config_path: str, data_root_override: str | None = None) -> int:
     with open(os.path.join(staging_root, "manifest.json"), "w") as f:
         json.dump(manifest, f, indent=2, default=str)
 
-    if channel_to_train is not None:
+    if channel_to_common is not None:
         routing = {
             "inferred_labels_key": inferred_key,
-            "n_channels": int(channel_to_train.size),
-            "channel_to_semkitti_train": [int(x) for x in channel_to_train],
-            "common_to_semkitti_train": LM.COMMON_TO_SEMKITTI_TRAIN,
+            "n_channels": int(channel_to_common.size),
+            "channel_to_common": [int(x) for x in channel_to_common],
+            "common_to_semkitti_train_canonical": LM.COMMON_TO_SEMKITTI_TRAIN,
+            "common_to_semkitti_train_weighted": {
+                str(c): [(int(t), float(w)) for t, w in splits]
+                for c, splits in LM.COMMON_TO_SEMKITTI_TRAIN_WEIGHTED.items()
+            },
         }
         with open(os.path.join(staging_root, "routing.json"), "w") as f:
             json.dump(routing, f, indent=2)
