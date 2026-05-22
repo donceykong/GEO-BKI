@@ -336,10 +336,14 @@ class MCDData {
       return true;
     }
     
-    // Get the original first pose (before transformation to origin)
-    // This is needed to align OSM data with the same coordinate frame
+    // Get the first pose used to align OSM data into the map frame.
+    // The map frame is the initial LIDAR frame, so OSM must be aligned to the first
+    // lidar pose L0 = B0 * X (X = lidar->body extrinsic), not the first body pose B0.
+    // For identity calibration X = I and this returns the original (body) first pose.
     Eigen::Matrix4d getOriginalFirstPose() const {
-      return original_first_pose_;
+      Eigen::Matrix4d X = body_to_lidar_tf_.isZero(1e-10) ? Eigen::Matrix4d::Identity()
+                                                          : body_to_lidar_tf_;
+      return original_first_pose_ * X;
     }
 
     /// Enable multiclass for inferred labels: read per-class confidence scores and take argmax.
@@ -938,13 +942,21 @@ class MCDData {
           exit(1);
         }
         
-        // Apply body-to-lidar transformation
-        // The poses in CSV are body/IMU poses, need to transform from lidar frame to world frame
-        // Following Python code: transform_matrix = body_to_world @ lidar_to_body
-        // where lidar_to_body = inv(body_to_lidar_tf)
-        Eigen::Matrix4d lidar_to_body = body_to_lidar_tf_.inverse();
-        Eigen::Matrix4d lidar_to_map = transform * lidar_to_body;  // T_lidar_to_map = body_to_world * lidar_to_body
-        
+        // Apply lidar-to-body extrinsic, then body-to-world pose.
+        // The poses in CSV are body/IMU poses; points are in the lidar frame.
+        // body/os_sensor/T in hhs_calib.yaml is the EuRoC T_BS convention: it maps
+        // lidar -> body (sensor pose in body), so it is applied DIRECTLY (no inverse).
+        // This matches how the MCD authors' FAST-LIO uses the same extrinsic
+        // (p_imu = R_{L->I} * p_lidar + T_{L->I}, applied directly).
+        Eigen::Matrix4d lidar_to_body = body_to_lidar_tf_;  // body/os_sensor/T is already lidar->body
+        // Express the map in the INITIAL LIDAR frame rather than the initial body/IMU frame.
+        // On MCD the body/IMU is mounted ~upside-down (its +z points down w.r.t. gravity), so a
+        // body-aligned map renders upside-down; the lidar frame is ~upright. Conjugating the
+        // body-relative pose by the extrinsic re-expresses it as the lidar pose relative to the
+        // first lidar pose:  X^-1 (B0^-1 Bi) X = (B0 X)^-1 (Bi X) = L0^-1 Li,  with X = lidar->body.
+        // For identity calibration (KITTI-360, cu_north_campus) X = I and this is a no-op.
+        Eigen::Matrix4d lidar_to_map = lidar_to_body.inverse() * transform * lidar_to_body;  // L0^-1 * Li
+
         // Publish TF transform from 'map' to 'lidar' frame
         geometry_msgs::msg::TransformStamped t;
         t.header.stamp = node_->now();
@@ -1015,10 +1027,10 @@ class MCDData {
         if ((publish_height_bins_scan_ || publish_height_bins_map_) && !cloud->points.empty()) {
           if (!height_bins_up_ref_set_ && !lidar_poses_.empty()) {
             // Reference "up" is the +z axis of the first scan's lidar, expressed in
-            // the (first-pose-relative) map frame. After the first-pose normalization
-            // at load time lidar_poses_[0] ≈ I, so this reduces to column 2 of
-            // lidar_to_body, but computing it explicitly is robust to future changes.
-            Eigen::Matrix4d first_lidar_to_map = lidar_poses_[0] * lidar_to_body;
+            // the map frame. The map is the initial lidar frame (see process_scans), so
+            // first_lidar_to_map = X^-1 * lidar_poses_[0] * X reduces to identity (lidar_poses_[0] ≈ I),
+            // giving up-ref = [0,0,1]. Computing it explicitly stays correct if the frame changes.
+            Eigen::Matrix4d first_lidar_to_map = lidar_to_body.inverse() * lidar_poses_[0] * lidar_to_body;
             height_bins_up_ref_ = Eigen::Vector3f(
                 static_cast<float>(first_lidar_to_map(0, 2)),
                 static_cast<float>(first_lidar_to_map(1, 2)),
@@ -1605,10 +1617,11 @@ class MCDData {
 
         Eigen::Matrix4d transform = lidar_poses_[pose_idx];  // This is body_to_world from pose
         
-        // Apply body-to-lidar transformation (same as in process_scans)
-        // Following Python code: transform_matrix = body_to_world @ lidar_to_body
-        Eigen::Matrix4d lidar_to_body = body_to_lidar_tf_.inverse();
-        Eigen::Matrix4d new_transform = transform * lidar_to_body;  // body_to_world * lidar_to_body
+        // Apply lidar-to-body extrinsic, then body-to-world pose (same as in process_scans).
+        // body/os_sensor/T is lidar->body (EuRoC T_BS), applied DIRECTLY (no inverse).
+        // Map is expressed in the initial lidar frame: X^-1 (B0^-1 Bi) X = L0^-1 Li (no-op if X=I).
+        Eigen::Matrix4d lidar_to_body = body_to_lidar_tf_;  // body/os_sensor/T is already lidar->body
+        Eigen::Matrix4d new_transform = lidar_to_body.inverse() * transform * lidar_to_body;  // L0^-1 * Li
         pcl::transformPointCloud(*cloud, *cloud, new_transform);
 
         // Create directory if it doesn't exist

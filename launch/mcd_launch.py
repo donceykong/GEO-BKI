@@ -175,8 +175,10 @@ def launch_setup(context):
         parameters=mcd_params
     )
 
-    # OSM visualizer uses same config (mcd.yaml) and data_dir from launch; use osm_bki.yaml geometry
-    osm_params = [data_config_path, {'data_dir': data_dir_path, 'config_datasets_dir': config_datasets_dir}]
+    # OSM visualizer uses same config (mcd.yaml) and data_dir from launch; use osm_bki.yaml geometry.
+    # Pass calibration_file so OSM is aligned to the initial lidar frame (matches mcd_node's map).
+    osm_params = [data_config_path, {'data_dir': data_dir_path, 'config_datasets_dir': config_datasets_dir,
+                                     'calibration_file': calib_file_path}]
     if geom_params:
         osm_params.append({'osm_geometry_parameters': geom_params})
 

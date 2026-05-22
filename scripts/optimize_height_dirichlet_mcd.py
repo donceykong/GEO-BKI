@@ -225,8 +225,11 @@ def main():
     for i in range(len(poses)):
         poses[i] = (poses[i][0], first_inv @ poses[i][1])
 
-    body_to_lidar = load_calibration(calib_file)
-    lidar_to_body = np.linalg.inv(body_to_lidar)
+    # body/os_sensor/T is the lidar->body extrinsic (EuRoC T_BS), applied directly.
+    # The map frame is the INITIAL LIDAR frame, matching the C++ runtime (mcd_util.h):
+    #   lidar_to_map = X^-1 (B0^-1 Bi) X = (B0 X)^-1 (Bi X) = L0^-1 Li,  X = lidar->body.
+    X = load_calibration(calib_file)        # lidar -> body
+    X_inv = np.linalg.inv(X)                 # body -> lidar
 
     keyframe_dist = args.keyframe_dist
     scan_list, last_kf = [], None
@@ -257,7 +260,7 @@ def main():
         pts, labels_raw = pts[:n], labels_raw[:n]
         gt_common = np.array([gt_mapping.get(int(l), 0) for l in labels_raw], dtype=np.int32)
 
-        lidar_to_map = T @ lidar_to_body
+        lidar_to_map = X_inv @ T @ X  # L0^-1 * Li (map = initial lidar frame)
         xyz_h  = np.hstack([pts[:, :3], np.ones((n, 1), dtype=np.float32)])
         map_pts = (lidar_to_map @ xyz_h.T).T[:, :3]
 

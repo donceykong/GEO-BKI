@@ -3,7 +3,7 @@
 /**:
   ros__parameters:
     # Root data directory; if empty, use package local data dir (e.g. <pkg>/data).
-    data_root: "/media/donceykong/doncey_ssd_02/datasets/"
+    data_root: "/media/donceykong/doncey_ssd_021/datasets/"
 
     # Map information
     resolution: 0.5
@@ -104,10 +104,10 @@
     # To use inferred (model) labels as rows (optimize for OSM to correct inferred toward GT), add --use-inferred-row.
     # Then set osm_confusion_matrix_file to the output file.
     osm_confusion_matrix_file: osm_confusion_matrix_optimized_MCD_NEW.yaml
-    osm_prior_strength: 0.0 #0.10             # per-class kernel boost strength (0.0 = disabled)
-    osm_dirichlet_prior_strength: 0.0 #0.50   # spatially varying Dirichlet prior from OSM (0.0 = uniform prior everywhere)
+    osm_prior_strength: 1.0 #0.10             # per-class kernel boost strength (0.0 = disabled)
+    osm_dirichlet_prior_strength: 0.5 #0.50   # spatially varying Dirichlet prior from OSM (0.0 = uniform prior everywhere)
     osm_scan_radius_extension: 1.5      # multiply scan's max XY extent by this factor for OSM geometry pre-filtering (1.0 = exact, >1.0 = margin)
-    osm_height_filtering: false          # use height-based filtering for OSM priors
+    osm_height_filtering: true          # use height-based filtering for OSM priors
 
     # --- Gaussian height filter parameters (active when osm_height_filtering: true) ---
     height_kernel_lambda: 1.0        # blend weight (0 = disabled, 1 = full gating)
@@ -120,10 +120,10 @@
     # 6 vegetation, 7 vehicle, 8 terrain)
 
     # Day 09
-    height_kernel_mu:        [2.4572, 3.4084, 3.5867, 3.3294, -0.4431, 1.9793, -1.1289, 2.3673, 3.2742]
-    height_kernel_tau:       [100.0, 0.6195, 0.8915, 0.8197, 3.0629, 1.536, 2.8827, 0.9734, 1.2792]
-    height_kernel_dead_zone: [0.8928, 0.3584, 0.4633, 0.4794, 2.0931, 1.0293, 1.9211, 0.5173, 0.5758]
-    
+    height_kernel_mu:        [1.2256, 0.0387, -0.2449, 1.0937, 5.7855, 1.2157, 4.9264, 1.167, 0.1899]
+    height_kernel_tau:       [100.0, 1.0409, 1.3263, 1.7605, 4.1198, 1.9819, 3.488, 1.5508, 2.0618]
+    height_kernel_dead_zone: [1.2756, 0.5887, 0.6051, 1.0563, 3.0355, 1.1657, 2.3236, 0.817, 0.9601]
+
     # # Night 05
     # height_kernel_mu:        [2.3148, 3.2861, 3.5839, 3.2548, -1.0027, 2.409, -0.1709, 2.485, 3.1682]
     # height_kernel_tau:       [100.0, 0.4657, 0.6309, 0.5426, 3.288, 1.4624, 2.4667, 0.7992, 1.3838]

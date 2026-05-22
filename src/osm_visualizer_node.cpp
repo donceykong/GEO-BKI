@@ -35,6 +35,7 @@ int main(int argc, char** argv) {
     node->declare_parameter<std::string>("pose_format", "mcd");  // "mcd" = num,timestamp,x,y,z,qx,qy,qz,qw; "kitti360" = frame_index + 12 or 16 floats (3x4/4x4)
     node->declare_parameter<bool>("osm_in_sequence_dir", false);  // if true, OSM path is data_dir/sequence_name/osm_file
     node->declare_parameter<std::string>("data_dir", "");
+    node->declare_parameter<std::string>("calibration_file", "");  // hhs_calib.yaml; aligns OSM to the initial LIDAR frame (matches mcd_node map). Empty/identity = body frame.
 
     std::string osm_file;
     double osm_origin_lat, osm_origin_lon;
@@ -71,6 +72,28 @@ int main(int argc, char** argv) {
     bool osm_in_sequence_dir = false;
     node->get_parameter("osm_in_sequence_dir", osm_in_sequence_dir);
     node->get_parameter("data_dir", data_dir);
+    std::string calibration_file;
+    node->get_parameter("calibration_file", calibration_file);
+
+    // Load the lidar->body extrinsic (body/os_sensor/T in hhs_calib.yaml) so OSM can be aligned
+    // to the initial LIDAR frame, matching mcd_node's map. Identity if no calibration provided.
+    Eigen::Matrix4d body_to_lidar = Eigen::Matrix4d::Identity();
+    if (!calibration_file.empty()) {
+        try {
+            YAML::Node calib = YAML::LoadFile(calibration_file);
+            YAML::Node T = calib["body"]["os_sensor"]["T"];
+            if (T && T.IsSequence() && T.size() == 4) {
+                for (int i = 0; i < 4; ++i)
+                    for (int j = 0; j < 4; ++j)
+                        body_to_lidar(i, j) = T[i][j].as<double>();
+                RCLCPP_INFO(node->get_logger(), "OSM visualizer: loaded body/os_sensor/T from %s; aligning OSM to initial lidar frame.", calibration_file.c_str());
+            } else {
+                RCLCPP_WARN(node->get_logger(), "OSM visualizer: body/os_sensor/T not found in %s; using body frame.", calibration_file.c_str());
+            }
+        } catch (const std::exception& e) {
+            RCLCPP_WARN(node->get_logger(), "OSM visualizer: failed to read calibration '%s' (%s); using body frame.", calibration_file.c_str(), e.what());
+        }
+    }
     if (!sequence_name.empty() && !lidar_pose_suffix.empty()) {
         lidar_pose_file = sequence_name + "/" + lidar_pose_suffix;
     }
@@ -219,13 +242,15 @@ int main(int argc, char** argv) {
                 RCLCPP_INFO_STREAM(node->get_logger(), "First pose - Translation: [" << first_t.x() << ", " << first_t.y() << ", " << first_t.z() << "]");
 
                 // For KITTI-360: translation-only shift (matching Python visualize_map_osm.py).
-                // For MCD: full 4x4 inverse.
+                // For MCD: align to the initial LIDAR pose L0 = B0 * X (X = lidar->body extrinsic)
+                // so OSM lands in the same frame as mcd_node's map (the initial lidar frame).
+                // With identity calibration X = I this reduces to the first body pose.
                 Eigen::Matrix4d first_pose_for_osm;
                 if (pose_format == "kitti360") {
                     first_pose_for_osm = Eigen::Matrix4d::Identity();
                     first_pose_for_osm.block<3, 1>(0, 3) = first_t;
                 } else {
-                    first_pose_for_osm = poses[0];
+                    first_pose_for_osm = poses[0] * body_to_lidar;  // B0 * X = L0
                 }
                 RCLCPP_INFO(node->get_logger(), "Transforming OSM data to first pose origin (so both start at 0,0,0)...");
                 visualizer.transformToFirstPoseOrigin(first_pose_for_osm);
