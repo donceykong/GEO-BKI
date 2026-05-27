@@ -6,6 +6,10 @@ raw_predictions
 # Per-run logs are machine-specific.
 logs/
 
+# Per-combo raw_numbers.json snapshots — intermediate inputs to
+# aggregate_results.py, not the canonical output.
+results/per_combo/
+
 # Python bytecode.
 __pycache__/
 *.pyc

@@ -34,6 +34,20 @@ COMBOS=(
   mcd_kth_night_05_ood
 )
 
+# Caller may override the combo list by passing combo names as positional
+# args (e.g., to resume after a crash, or to rerun a single combo). With
+# no args, run the full default set above.
+if [ "$#" -gt 0 ]; then
+  COMBOS=("$@")
+fi
+
+# Per-combo raw_numbers.json snapshot dir. The shared per-sequence
+# eval_dir would otherwise let combo_X_ood overwrite combo_X_id, so we
+# stash each combo's results immediately after eval. aggregate_results.py
+# reads these snapshots first, falling back to the shared eval_dir.
+SNAPSHOT_DIR="$REPO/baselines/convbki/results/per_combo"
+mkdir -p "$SNAPSHOT_DIR"
+
 declare -A KEYFRAME_DIR=(
   [kitti360_seq0000_id]=static_gaussian_indomain
   [kitti360_seq0000_ood]=static_gaussian_crossdomain
@@ -122,6 +136,11 @@ for combo in "${COMBOS[@]}"; do
 
   miou=$($PY -c "import json; d=json.load(open('$eval_dir/raw_numbers.json')); print(d['miou'])")
   echo "[$combo] mIoU = $miou" | tee -a "$ORCHESTRATOR_LOG"
+
+  # Snapshot raw_numbers.json before the next combo on this sequence wipes
+  # the shared eval_dir.
+  cp "$eval_dir/raw_numbers.json" "$SNAPSHOT_DIR/${combo}.json"
+  echo "[$combo] snapshot -> $SNAPSHOT_DIR/${combo}.json" | tee -a "$ORCHESTRATOR_LOG"
   # Hard-abort threshold: mIoU < 0.03
   if $PY -c "import sys; sys.exit(0 if float(sys.argv[1]) < 0.03 else 1)" "$miou"; then
     echo "[$combo] ABORTING: mIoU $miou below 0.03 threshold." | tee -a "$ORCHESTRATOR_LOG"

@@ -37,6 +37,12 @@ OOD_COMBOS = ["kitti360_seq0000_ood", "kitti360_seq0009_ood", "mcd_kth_day_09_oo
 
 
 def find_raw_numbers(combo: str, data_root: str) -> str | None:
+    # Prefer the per-combo snapshot written by run_all.sh, since the
+    # shared per-sequence eval_dir gets overwritten when the paired
+    # ID/OOD combo runs.
+    snap = os.path.join(REPO, "baselines", "convbki", "results", "per_combo", f"{combo}.json")
+    if os.path.isfile(snap):
+        return snap
     ds, seq = COMBO_SEQ_TABLE[combo]
     p = os.path.join(data_root, ds, seq, "evaluations", "convbki", "raw_numbers.json")
     return p if os.path.isfile(p) else None
