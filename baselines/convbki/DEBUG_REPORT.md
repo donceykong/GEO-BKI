@@ -340,4 +340,27 @@ from MCD CENet (true for S-BKI too).
 
 ### Per-combo results
 
+**1/8 kitti360_seq0000_id** (in-domain, kitti360-trained CENet) —
+finished 2026-05-21 12:37 EDT (1h33m end-to-end; inference 4046s @
+~2.6 scans/s). Eval on all 4433 `static_gaussian_indomain` keyframes,
+454.6M points after dropping class 0.
+
+```
+cls name           IoU    Acc    Prec     GT_cnt    Pred_cnt
+  1 road        0.7430 0.7703 0.9544 109007289    87984032
+  2 sidewalk    0.6457 0.7283 0.8505  58758977    50319509
+  3 parking     0.2643 0.7768 0.2860  10927791    29682203
+  4 building    0.7176 0.7479 0.9465 111688763    88258428
+  5 fence       0.2535 0.6337 0.2970  10381934    22150564
+  6 vegetation  0.6363 0.7274 0.8355  82138524    71509332
+  7 vehicle     0.7552 0.9187 0.8093  31770610    36066802
+  8 terrain     0.4896 0.8594  0.5322 39912866    64442563
+mIoU = 0.5631   mAcc = 0.7703
+```
+
+Notable: terrain is alive (IoU 0.49) — this CENet has its own terrain
+channel, unlike MCD's 29-channel network. Strong road/building/vehicle
+results (all > 0.71). Cleanup ran (staging + nbki_runs/ dropped, raw
+.label files archived to `raw_predictions/`).
+
 
