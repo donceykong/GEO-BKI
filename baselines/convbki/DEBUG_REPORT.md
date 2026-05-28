@@ -363,4 +363,135 @@ channel, unlike MCD's 29-channel network. Strong road/building/vehicle
 results (all > 0.71). Cleanup ran (staging + nbki_runs/ dropped, raw
 .label files archived to `raw_predictions/`).
 
+**2/8 kitti360_seq0000_ood** (cross-domain, mcd-trained CENet) —
+finished 2026-05-27 15:31 EDT (1h32m end-to-end; inference 4214s @
+~2.5 scans/s). Eval on all 4433 `static_gaussian_crossdomain`
+keyframes, 454.6M points after dropping class 0.
+
+```
+cls name            IoU    Acc    Prec     GT_cnt    Pred_cnt
+  1 road         0.0885 0.0892 0.9098 109007289    10692305
+  2 sidewalk     0.2279 0.5487 0.2804  58758977   114978648
+  3 parking      0.0129 0.0134 0.2501  10927791      587497
+  4 building     0.4749 0.9636 0.4835 111688763   222580804
+  5 fence        0.0216 0.0241 0.1693  10381934     1480704
+  6 vegetation   0.1157 0.2263 0.1914  82138524    97080182
+  7 vehicle      0.0059 0.0059 0.6129  31770610      305744
+  8 terrain      0.0000 0.0000 0.0000  39912866           0
+mIoU = 0.1184   mAcc = 0.2339
+```
+
+Notable: building hangs on under cross-domain (IoU 0.47, recall 0.96 —
+MCD CENet aggressively labels everything tall as building, hence the
+2x over-prediction). Road collapses to 0.09 (CENet predicts only 10M
+of 109M road points, prec 0.91 but recall 0.09). Vehicle effectively
+absent (0.006) — MCD CENet's vehicle channel doesn't fire on KITTI-360
+sweeps. Terrain at 0.00 because MCD CENet has no terrain class.
+Cleanup ran.
+
+**3/8 kitti360_seq0009_id** (in-domain, kitti360-trained CENet) —
+finished 2026-05-27 17:29 EDT (1h58m end-to-end; inference 5096s @
+~2.58 scans/s, 13164 scans). Eval on 5566 `static_gaussian_indomain`
+keyframes, 577.5M points after dropping class 0.
+
+```
+cls name            IoU    Acc    Prec     GT_cnt    Pred_cnt
+  1 road         0.8564 0.8969 0.9499 115882269   109423095
+  2 sidewalk     0.6819 0.7634 0.8646  88510302    78150726
+  3 parking      0.3140 0.8604 0.3308  15721096    40889183
+  4 building     0.7059 0.7524 0.9196 112828029    92313539
+  5 fence        0.2615 0.6613 0.3019  10769711    23593247
+  6 vegetation   0.7048 0.7735 0.8880 167155289   145617105
+  7 vehicle      0.7344 0.8875 0.8097  34104412    37381615
+  8 terrain      0.5079 0.7926 0.5858  32513044    43991951
+mIoU = 0.5958   mAcc = 0.7985
+```
+
+Notable: ~3pt higher mIoU than seq 0000 (0.5958 vs 0.5631), driven by
+much stronger road (0.86 vs 0.74), sidewalk (0.68 vs 0.65), and
+vegetation (0.70 vs 0.64). Vehicle drops slightly (0.73 vs 0.76).
+Parking/fence remain the weak classes (~0.26-0.31), consistent across
+both KITTI-360 sequences. Cleanup ran.
+
+**4/8 kitti360_seq0009_ood** (cross-domain, mcd-trained CENet) —
+finished 2026-05-27 19:19 EDT (1h51m end-to-end; inference 5017s @
+~2.62 scans/s, 13164 scans). Eval on 5566 `indomain_with_height`
+keyframes, 577.5M points after dropping class 0.
+
+```
+cls name            IoU    Acc    Prec     GT_cnt    Pred_cnt
+  1 road         0.0404 0.0408 0.8138 115882269     5804881
+  2 sidewalk     0.2439 0.5712 0.2986  88510302   169302565
+  3 parking      0.0005 0.0005 0.0639  15721096      112614
+  4 building     0.3725 0.9746 0.3762 112828029   292313147
+  5 fence        0.0124 0.0136 0.1251  10769711     1170263
+  6 vegetation   0.1836 0.2485 0.4127 167155289   100625848
+  7 vehicle      0.0020 0.0021 0.5181  34104412      135016
+  8 terrain      0.0000 0.0000 0.0000  32513044           0
+mIoU = 0.1069   mAcc = 0.2314
+```
+
+Notable: same cross-domain failure pattern as seq 0000 OOD — building
+dominates (recall 0.97, prec 0.38, over-predicts 2.6x), road collapses
+to 0.04, vehicle ~0.002, terrain 0. Slightly worse mIoU than seq 0000
+OOD (0.1069 vs 0.1184), primarily from road dropping further (0.04 vs
+0.09). Cleanup ran. All 4 KITTI-360 combos now complete.
+
+**5-8 STAGING FAILURE — MCD combos blocked.** At 2026-05-27 19:19 EDT
+all four MCD combos (mcd_kth_day_09_id/_ood, mcd_kth_night_05_id/_ood)
+failed in <1s during `stage_inputs.py`:
+
+```
+FileNotFoundError: '/media/sgarimella34/hercules-collect3/datasets/
+                    mcd/hhs_calib.yaml'
+```
+
+The file is simply absent from this machine — not a wrong-name issue.
+All four MCD configs point at the same `${OSM_BKI_DATA_ROOT}/mcd/
+hhs_calib.yaml`, which is correct: MCD ships a single body->lidar
+extrinsic shared across every MCD sequence (same sensor platform; KTH
+day vs night use identical calibration). `launch/mcd_launch.py:126`
+resolves the same path, and S-BKI eval outputs already exist on disk
+for these KTH sequences — so the file was present when those were
+generated, but no copy survives anywhere under `/` now (searched).
+
+`stage_inputs.py:150-156` `load_body_to_lidar_mcd` reads
+`cfg["body"]["os_sensor"]["T"]` and asserts a 4x4. On a missing file it
+raises an uncaught `FileNotFoundError` and crashes hard — the
+`if not calib_file` guard at line 353 only catches an *empty* config
+value, not a configured-but-missing path. The C++ side
+(`mcd_node.cpp` / `mcd_util.h:1525`) only falls back to identity when
+the param is the empty string (the `cu_north_campus` path); for
+`dataset='mcd'` a missing file is FATAL there too.
+
+Resolution per maintainer: Doncey has the original `hhs_calib.yaml`;
+once dropped at `/media/sgarimella34/hercules-collect3/datasets/mcd/
+hhs_calib.yaml` the 4 MCD combos resume unchanged. The fix is "provide
+the file," NOT patch the loader — `stage_inputs.py` left untouched.
+
+### Current state — 2026-05-28
+
+Done (4/8), results in `baselines/convbki/results/per_combo/`:
+  - 1 kitti360_seq0000_id   mIoU 0.5631  (ID)
+  - 2 kitti360_seq0000_ood  mIoU 0.1184  (OOD)
+  - 3 kitti360_seq0009_id   mIoU 0.5958  (ID)
+  - 4 kitti360_seq0009_ood  mIoU 0.1069  (OOD)
+
+Blocked (4/8) on missing `hhs_calib.yaml`:
+  - 5 mcd_kth_day_09_id    6 mcd_kth_day_09_ood
+  - 7 mcd_kth_night_05_id  8 mcd_kth_night_05_ood
+
+Partial aggregate written to `results/{raw_numbers.json, in_domain.md,
+cross_domain.md}` — KITTI-360 rows populated, MCD rows blank (`-`).
+
+Also fixed a latent bug in `aggregate_results.py`: `REPO` was computed
+one `dirname()` too shallow, resolving to `<repo>/baselines` instead of
+`<repo>`. That (a) misfiled all aggregate output under
+`baselines/baselines/convbki/results/`, and (b) defeated the per-combo
+snapshot lookup added earlier — so the aggregator silently fell back to
+the shared per-sequence eval_dir and reported the OOD numbers in the ID
+rows. Corrected to four `dirname()` levels; ID/OOD rows now read from
+the correct snapshots. The stray `baselines/baselines/` tree was
+removed.
+
 

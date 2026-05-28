@@ -17,7 +17,8 @@ import json
 import os
 import sys
 
-REPO = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+# scripts/ -> convbki/ -> baselines/ -> repo root (four levels up).
+REPO = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
 
 COMBO_SEQ_TABLE = {
     "kitti360_seq0000_id":  ("kitti360", "2013_05_28_drive_0000_sync"),
