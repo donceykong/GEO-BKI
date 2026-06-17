@@ -1,0 +1,51 @@
+# Conv-BKI eval config: KITTI-360 seq 0009, OOD, RETRAINED native-9-class.
+#
+# Mirror of kitti360_seq0000_ood_retrained.yaml for sequence 0009. OOD = KITTI-360
+# scans through the MCD-trained CENet. Uses the terrain variant
+# cenet_mcd_terrain_softmax (FULL 30-channel MCD taxonomy, terrain at ch29),
+# collapsed to 9-class common via mcd_to_common (build_source_channel_to_common
+# 'mcd', K=30). Unlike Option A's 29-channel cenet_mcd_softmax (terrain absent),
+# terrain (ch29) is present here so OOD terrain can score > 0.
+#
+# Evaluated on all GT scans (13164) -- same all-GT-scan basis as the ID retrained
+# eval and the seq 0000 retrained evals.
+
+experiment_name: kitti360_seq0009_ood_retrained
+
+dataset: kitti360
+sequence_name: 2013_05_28_drive_0009_sync
+data_root: null
+
+input_data_suffix: velodyne_points/data
+lidar_pose_suffix: velodyne_poses.txt
+input_label_suffix: inferred_labels/cenet_mcd_terrain_softmax
+gt_label_suffix: gt_labels
+
+inferred_labels_key: mcd          # CENet trained on MCD taxonomy (30 channels)
+gt_labels_key: kitti360           # GT is KITTI-360 taxonomy
+
+calibration_file: ""
+
+native_common: true
+
+staging_root: /home/sandilya/convbki_train_workspace/eval/kitti360_seq0009_ood_retrained/staging
+output_root: /home/sandilya/convbki_train_workspace/eval/kitti360_seq0009_ood_retrained/nbki_runs
+log_dir: baselines/convbki/logs
+
+weights:
+  path: baselines/convbki/Weights/kitti360_9class_gt/filters5.pt
+
+grid:
+  grid_size: [501, 501, 27]
+  min_bound: [-50.1, -50.1, -2.7]
+  max_bound: [50.1, 50.1, 2.7]
+
+num_classes: 9
+hard_input: true
+filter_size: 5
+kernel: sparse
+per_class: true
+compound: false
+ell: 0.5
+seed: 42
+device: cuda
