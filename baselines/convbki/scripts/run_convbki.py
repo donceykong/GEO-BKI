@@ -116,9 +116,17 @@ def main(config_path: str, hard: bool = False, limit: int | None = None) -> int:
     print(f"  bounds       = {min_bound} -> {max_bound}")
     print(f"  voxel_size   ~ {vx:.4f} m")
 
-    weights_dir = cfg["weights"]["dir"]
-    weights_epoch = int(cfg["weights"]["epoch"])
-    weights_path = os.path.join(nbki_root, "Models", "Weights", weights_dir, f"filters{weights_epoch}.pt")
+    # weights.path (absolute) takes precedence over dir/epoch — lets the
+    # retrained native-9-class checkpoints live outside NeuralBKI/Models/Weights
+    # (e.g. baselines/convbki/Weights/kitti360_9class_gt/filtersN.pt).
+    wcfg = cfg["weights"]
+    if wcfg.get("path"):
+        wp = os.path.expandvars(wcfg["path"])
+        weights_path = wp if os.path.isabs(wp) else os.path.join(REPO_ROOT, wp)
+    else:
+        weights_path = os.path.join(
+            nbki_root, "Models", "Weights", wcfg["dir"], f"filters{int(wcfg['epoch'])}.pt"
+        )
     print(f"  weights      = {weights_path}")
     weights = torch.load(weights_path, map_location=device)
 

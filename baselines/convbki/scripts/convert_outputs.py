@@ -78,6 +78,7 @@ def convert(
     keyframe_stems_from: str | None,
     copy_raw: bool,
     data_root_override: str | None = None,
+    eval_dir_override: str | None = None,
 ) -> int:
     with open(config_path) as f:
         cfg = yaml.safe_load(f)
@@ -109,17 +110,31 @@ def convert(
     gt_key = cfg["gt_labels_key"]
     gt_label_suffix = cfg["gt_label_suffix"]
 
+    # native_common: Conv-BKI predictions are already 9-class common (0..8),
+    # so map pred -> common is identity. Otherwise project SemKITTI 20-class
+    # training -> common (Option A). Default False preserves Option A.
+    native_common = bool(cfg.get("native_common", False))
+
     # -- LUTs ------------------------------------------------------------- #
-    LM.load_semkitti_config(nbki_root)
     common_cfg = LM.load_common_config(common_yaml)
-    train_to_common = LM.build_semkitti_train_to_common(common_cfg)
-    pred_lut = build_train_to_common_lut(train_to_common)
+    if native_common:
+        pred_lut = np.arange(256, dtype=np.uint32)  # identity: pred is common 0..8
+    else:
+        LM.load_semkitti_config(nbki_root)
+        train_to_common = LM.build_semkitti_train_to_common(common_cfg)
+        pred_lut = build_train_to_common_lut(train_to_common)
     gt_lut = build_raw_gt_to_common_lut(gt_key, common_cfg)
 
     # -- Locate inputs / outputs ----------------------------------------- #
     pred_dir = os.path.join(output_root, "sequences", "00", "predictions")
     gt_dir = os.path.join(data_root, dataset, sequence, gt_label_suffix)
-    eval_dir = os.path.join(data_root, dataset, sequence, "evaluations", "convbki")
+    # eval_dir defaults under data_root, but --eval-dir / cfg eval_dir can
+    # redirect it (required when data_root is a read-only / off-limits drive,
+    # e.g. the native-9-class retrained eval writes under /home/sandilya).
+    eval_dir = eval_dir_override or cfg.get("eval_dir") or os.path.join(
+        data_root, dataset, sequence, "evaluations", "convbki"
+    )
+    eval_dir = os.path.expandvars(eval_dir)
     raw_archive_dir = os.path.join(
         REPO_ROOT, "baselines", "convbki", "raw_predictions", dataset, sequence
     )
@@ -206,6 +221,13 @@ if __name__ == "__main__":
         default=None,
         help="Overrides data_root from the YAML.",
     )
+    p.add_argument(
+        "--eval-dir",
+        default=None,
+        help="Overrides the output eval dir (default <data_root>/<dataset>/"
+        "<sequence>/evaluations/convbki). Use to keep output off a read-only "
+        "or off-limits data drive.",
+    )
     args = p.parse_args()
     sys.exit(
         convert(
@@ -213,5 +235,6 @@ if __name__ == "__main__":
             keyframe_stems_from=args.keyframe_stems_from,
             copy_raw=args.copy_raw,
             data_root_override=args.data_root,
+            eval_dir_override=args.eval_dir,
         )
     )

@@ -1,0 +1,64 @@
+{
+  "command": "python train_convbki_9class.py \\\n  --staging-root /home/sandilya/convbki_train_workspace/staging_train_gt \\\n  --train-seqs 0002 0004 0005 0006 0007 0010 \\\n  --val-seqs 0003 \\\n  --out-dir /home/sandilya/GEO-BKI/baselines/convbki/Weights/kitti360_9class_gt \\\n  --epochs 5 --batch 2 --num-frames 10 --num-workers 4 \\\n  --grid train40 --seed 42",
+  "seed": 42,
+  "grid": "train40 (\u00b140 m, 400\u00d7400\u00d726, 0.2 m voxel; transfers exactly to \u00b150 m eval grid \u2014 same voxel size)",
+  "num_frames": 10,
+  "batch": 2,
+  "epochs": 5,
+  "lr": 0.007,
+  "beta1": 0.9,
+  "beta2": 0.999,
+  "decay": 0.96,
+  "ell_init": 0.5,
+  "filter_size": 5,
+  "train_seqs": [
+    "0002",
+    "0004",
+    "0005",
+    "0006",
+    "0007",
+    "0010"
+  ],
+  "val_seqs": [
+    "0003"
+  ],
+  "train_scans": 20001,
+  "val_scans": 988,
+  "subsample": "--every-nth 2 \u2014 every 2nd scan kept at STAGING time on the 6 training seqs (20,001 of ~40,005 staged-eligible scans). Val seq 0003 staged at FULL density (988).",
+  "data_root": "/media/donceykong/donceys_data_ssd/datasets",
+  "staging_root": "/home/sandilya/convbki_train_workspace/staging_train_gt",
+  "started_at": "2026-06-12 14:17:50 MDT",
+  "class_names": {
+    "0": "unlabeled",
+    "1": "road",
+    "2": "sidewalk",
+    "3": "parking",
+    "4": "building",
+    "5": "fence",
+    "6": "vegetation",
+    "7": "vehicle",
+    "8": "terrain"
+  },
+  "class_counts": [
+    273385737,
+    465457364,
+    265407367,
+    76341682,
+    348773904,
+    37094475,
+    705891578,
+    70441204,
+    145119651
+  ],
+  "nll_weights": [
+    0.0,
+    0.050103887759144816,
+    0.051554958279699505,
+    0.0550942039213521,
+    0.05083901034463695,
+    0.05737570876968475,
+    0.049079821539055,
+    0.05533945824839853,
+    0.053211106316972574
+  ]
+}

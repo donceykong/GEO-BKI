@@ -16,7 +16,6 @@ import os
 import sys
 
 import numpy as np
-from sklearn.metrics import confusion_matrix, jaccard_score
 
 COMMON_CLASSES = [
     "unlabeled",
@@ -48,50 +47,66 @@ def main() -> int:
         return 2
 
     print(f"Reading {len(files)} files from {args.eval_dir}")
-    gt_all, pred_all = [], []
+    # Streaming accumulation: a full NxN confusion matrix over ALL points
+    # (rows=gt, cols=pred, both in 0..N-1) plus a presence mask of which
+    # classes ever appear. This keeps memory O(N^2) regardless of point count
+    # (the prior np.loadtxt + sklearn-on-all-points path OOM'd at ~454M pts),
+    # and every reported metric is recovered exactly from the confusion matrix.
+    full_cm = np.zeros((NUM_CLASSES, NUM_CLASSES), dtype=np.int64)
+    seen_gt = np.zeros(NUM_CLASSES, dtype=bool)
+    seen_pred = np.zeros(NUM_CLASSES, dtype=bool)
+    n_total = 0
+    n_parsed = 0
     for fp in files:
         try:
-            arr = np.loadtxt(fp, dtype=np.int32)
+            with open(fp) as fh:
+                toks = fh.read().split()
         except Exception as e:
-            print(f"WARN: failed to parse {fp}: {e}")
+            print(f"WARN: failed to read {fp}: {e}")
             continue
-        if arr.ndim == 1:
-            arr = arr.reshape(1, -1)
-        if arr.size == 0:
+        if not toks:
             continue
-        gt_all.append(arr[:, 0])
-        pred_all.append(arr[:, 1])
-    if not gt_all:
+        a = np.asarray(toks, dtype=np.int64).reshape(-1, 2)
+        gt = a[:, 0]
+        pred = a[:, 1]
+        # Guard against any stray out-of-range label.
+        in_range = (gt >= 0) & (gt < NUM_CLASSES) & (pred >= 0) & (pred < NUM_CLASSES)
+        gt = gt[in_range]
+        pred = pred[in_range]
+        if gt.size == 0:
+            continue
+        idx = gt * NUM_CLASSES + pred
+        full_cm += np.bincount(idx, minlength=NUM_CLASSES * NUM_CLASSES).reshape(
+            NUM_CLASSES, NUM_CLASSES
+        )
+        seen_gt[np.unique(gt)] = True
+        seen_pred[np.unique(pred)] = True
+        n_total += int(a.shape[0])
+        n_parsed += 1
+    if n_parsed == 0:
         print("No usable .txt files parsed")
         return 2
 
-    gt_all = np.concatenate(gt_all)
-    pred_all = np.concatenate(pred_all)
-    print(f"Total points: {len(gt_all)}")
-    print(f"Unique GT classes:   {sorted(np.unique(gt_all).tolist())}")
-    print(f"Unique pred classes: {sorted(np.unique(pred_all).tolist())}")
+    print(f"Total points: {n_total}")
+    print(f"Unique GT classes:   {sorted(np.flatnonzero(seen_gt).tolist())}")
+    print(f"Unique pred classes: {sorted(np.flatnonzero(seen_pred).tolist())}")
 
-    mask = gt_all != 0
-    gt_eval = gt_all[mask]
-    pred_eval = pred_all[mask]
-    print(f"Points after dropping unlabeled (class 0): {len(gt_eval)}")
+    # Drop unlabeled (gt class 0): metrics are computed over gt != 0 points,
+    # i.e. confusion-matrix rows 1..N-1 (pred columns still include 0).
+    eval_cm = full_cm[1:, :]                  # rows = gt 1..N-1, cols = pred 0..N-1
+    n_eval = int(eval_cm.sum())
+    print(f"Points after dropping unlabeled (class 0): {n_eval}")
 
     semantic_classes = np.arange(1, NUM_CLASSES)
-    iou = jaccard_score(
-        gt_eval, pred_eval, labels=semantic_classes, average=None, zero_division=0
-    )
-
-    acc = np.zeros(len(semantic_classes))
-    prec = np.zeros(len(semantic_classes))
-    gt_count = np.zeros(len(semantic_classes), dtype=np.int64)
-    pred_count = np.zeros(len(semantic_classes), dtype=np.int64)
-    for i, c in enumerate(semantic_classes):
-        gm = gt_eval == c
-        pm = pred_eval == c
-        gt_count[i] = int(gm.sum())
-        pred_count[i] = int(pm.sum())
-        acc[i] = (pred_eval[gm] == c).sum() / max(int(gm.sum()), 1)
-        prec[i] = (gt_eval[pm] == c).sum() / max(int(pm.sum()), 1)
+    inter = np.array([full_cm[c, c] for c in semantic_classes], dtype=np.int64)
+    gt_count = np.array([eval_cm[i, :].sum() for i in range(len(semantic_classes))],
+                        dtype=np.int64)                      # |gt == c|
+    pred_count = np.array([eval_cm[:, c].sum() for c in semantic_classes],
+                          dtype=np.int64)                    # |pred == c| over gt!=0
+    union = gt_count + pred_count - inter
+    iou = np.where(union > 0, inter / np.maximum(union, 1), 0.0)
+    acc = np.where(gt_count > 0, inter / np.maximum(gt_count, 1), 0.0)
+    prec = np.where(pred_count > 0, inter / np.maximum(pred_count, 1), 0.0)
 
     present = gt_count > 0
     miou = float(np.mean(iou[present]))
@@ -110,13 +125,15 @@ def main() -> int:
     print(f"mIoU (over classes present in GT) = {miou:.4f}")
     print(f"mAcc (over classes present in GT) = {macc:.4f}")
 
-    cm = confusion_matrix(gt_eval, pred_eval, labels=semantic_classes).astype(np.int64)
+    # confusion matrix over the semantic classes (gt 1..N-1 x pred 1..N-1),
+    # matching the prior labels=semantic_classes output (pred 0 excluded).
+    cm = full_cm[1:NUM_CLASSES, 1:NUM_CLASSES].astype(np.int64)
 
     out = {
         "eval_dir": os.path.abspath(args.eval_dir),
         "n_files": len(files),
-        "n_points_total": int(len(gt_all)),
-        "n_points_eval": int(len(gt_eval)),
+        "n_points_total": int(n_total),
+        "n_points_eval": int(n_eval),
         "semantic_classes": [int(c) for c in semantic_classes],
         "class_names": [COMMON_CLASSES[c] for c in semantic_classes],
         "per_class_iou": [float(x) for x in iou],
@@ -127,8 +144,8 @@ def main() -> int:
         "miou": miou,
         "macc": macc,
         "confusion_matrix": cm.tolist(),
-        "unique_gt_classes": sorted(np.unique(gt_all).tolist()),
-        "unique_pred_classes": sorted(np.unique(pred_all).tolist()),
+        "unique_gt_classes": sorted(np.flatnonzero(seen_gt).tolist()),
+        "unique_pred_classes": sorted(np.flatnonzero(seen_pred).tolist()),
     }
     out_path = args.out_json or os.path.join(args.eval_dir, "raw_numbers.json")
     with open(out_path, "w") as f:

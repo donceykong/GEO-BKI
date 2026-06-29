@@ -329,10 +329,19 @@ def stage(config_path: str, data_root_override: str | None = None) -> int:
     # ------------------------------------------------------------------ #
     # Label mappings
     # ------------------------------------------------------------------ #
+    # native_common: stage labels/predictions in the native 9-class common
+    # space (for the retrained native-9-class model) instead of SemKITTI
+    # 20-class. labels = raw GT -> common; predictions_hard = common argmax
+    # (no common->SemKITTI canonical hop). Default False preserves Option A.
+    native_common = bool(cfg.get("native_common", False))
+
     LM.load_semkitti_config(nbki_root)
     common_cfg = LM.load_common_config(common_yaml)
     LM.build_semkitti_train_to_common(common_cfg)
-    raw_to_train_lut = LM.build_raw_gt_to_semkitti_train(gt_key, common_cfg)
+    if native_common:
+        raw_to_label_lut = LM.build_raw_gt_to_common(gt_key, common_cfg)
+    else:
+        raw_to_label_lut = LM.build_raw_gt_to_semkitti_train(gt_key, common_cfg)
 
     # Channel count differs per CENet variant; learn it from the first
     # softmax file we encounter. We carry the channel->common routing
@@ -412,8 +421,8 @@ def stage(config_path: str, data_root_override: str | None = None) -> int:
         scan_bytes = os.path.getsize(in_scan)
         n_pts = scan_bytes // (4 * 4)   # float32 * 4 channels
 
-        # GT -> SemKITTI training class
-        gt_train = convert_gt(in_gt, raw_to_train_lut)
+        # GT -> labels space (common 0..8 when native_common, else SemKITTI 20-class)
+        gt_train = convert_gt(in_gt, raw_to_label_lut)
         if gt_train.size != n_pts:
             manifest["skipped"].append(
                 {"stem": stem, "reason": f"gt_size={gt_train.size} vs scan_pts={n_pts}"}
@@ -463,8 +472,10 @@ def stage(config_path: str, data_root_override: str | None = None) -> int:
         soft = LM.softmax_from_float16_raw(raw_u16)
         common = LM.aggregate_source_to_common(soft, channel_to_common, n_common=9)
         common_argmax = common.argmax(axis=1).astype(np.uint32)
-        hard_train = common_to_train_canon[common_argmax]
-        hard_train.astype(np.uint32).tofile(os.path.join(out_hard, f"{stem}.label"))
+        # native_common: keep the 9-class common argmax as the hard label.
+        # Otherwise route to a single canonical SemKITTI training class (Option A).
+        hard_out = common_argmax if native_common else common_to_train_canon[common_argmax]
+        hard_out.astype(np.uint32).tofile(os.path.join(out_hard, f"{stem}.label"))
 
         manifest["staged"].append({"stem": stem, "n_points": int(n_pts)})
 

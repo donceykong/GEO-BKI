@@ -171,6 +171,28 @@ def build_raw_gt_to_semkitti_train(
     return lut
 
 
+def build_raw_gt_to_common(
+    gt_labels_key: str,
+    common_cfg: dict,
+    max_raw_label: int = 65536,
+) -> np.ndarray:
+    """LUT: raw GT label -> 9-class common index (native, no SemKITTI hop).
+
+    The native-9-class retraining path writes labels directly in common space,
+    so GT is mapped raw -> common here instead of raw -> SemKITTI training class.
+    Labels with no entry collapse to 0 (unlabeled/ignore).
+    """
+    map_key = gt_labels_key + "_to_common"
+    if map_key not in common_cfg:
+        raise KeyError(f"labels_common.yaml has no mapping '{map_key}'")
+    src_to_common = {int(k): int(v) for k, v in common_cfg[map_key].items()}
+    lut = np.zeros(max_raw_label, dtype=np.uint32)
+    for raw, common in src_to_common.items():
+        if 0 <= raw < max_raw_label:
+            lut[raw] = common
+    return lut
+
+
 def aggregate_source_to_common(
     softmax_NK: np.ndarray,
     channel_to_common: np.ndarray,
