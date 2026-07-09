@@ -1,0 +1,82 @@
+{
+  "command": "python train_convbki_9class.py \\\n  --staging-root /home/sandilya/convbki_train_workspace/staging_train_gt_mcd \\\n  --train-seqs tuhh_day_02 tuhh_day_03 tuhh_day_04 tuhh_night_07 tuhh_night_08 ntu_day_01 ntu_day_02 ntu_day_10 ntu_night_04 ntu_night_08 ntu_night_13 \\\n  --val-seqs tuhh_night_09 \\\n  --out-dir /home/sandilya/GEO-BKI/baselines/convbki/Weights/mcd_9class_gt \\\n  --epochs 5 --batch 2 --num-frames 10 --num-workers 4 \\\n  --grid train40 --seed 42",
+  "dataset": "mcd",
+  "seed": 42,
+  "grid": "train40 (±40 m, 400×400×26, 0.2 m voxel; transfers exactly to ±50 m eval grid — same voxel size)",
+  "num_frames": 10,
+  "batch": 2,
+  "epochs": 5,
+  "lr": 0.007,
+  "beta1": 0.9,
+  "beta2": 0.999,
+  "decay": 0.96,
+  "ell_init": 0.5,
+  "filter_size": 5,
+  "train_seqs": [
+    "tuhh_day_02",
+    "tuhh_day_03",
+    "tuhh_day_04",
+    "tuhh_night_07",
+    "tuhh_night_08",
+    "ntu_day_01",
+    "ntu_day_02",
+    "ntu_day_10",
+    "ntu_night_04",
+    "ntu_night_08",
+    "ntu_night_13"
+  ],
+  "val_seqs": [
+    "tuhh_night_09"
+  ],
+  "train_scans": 24095,
+  "val_scans": 1833,
+  "subsample": "--every-nth 2 — every 2nd scan kept at STAGING time on the 11 training seqs (24,095 scans). Val seq tuhh_night_09 staged at FULL density (1,833).",
+  "data_root": "/media/donceykong/donceys_data_ssd/datasets",
+  "staging_root": "/home/sandilya/convbki_train_workspace/staging_train_gt_mcd",
+  "started_at": "2026-07-08 14:37:43 MDT",
+  "total_seconds": 8786.867916107178,
+  "class_names": {
+    "0": "unlabeled",
+    "1": "road",
+    "2": "sidewalk",
+    "3": "parking",
+    "4": "building",
+    "5": "fence",
+    "6": "vegetation",
+    "7": "vehicle",
+    "8": "terrain"
+  },
+  "class_counts": [
+    319072812,
+    345277711,
+    212509283,
+    28056708,
+    474873272,
+    84927565,
+    537394089,
+    87438382,
+    192282626
+  ],
+  "nll_weights": [
+    0.0,
+    0.050865061581134796,
+    0.0521526075899601,
+    0.058309927582740784,
+    0.050053659826517105,
+    0.05477258190512657,
+    0.04974569380283356,
+    0.0546853132545948,
+    0.05242607742547989
+  ],
+  "final_ell": [
+    0.16944599151611328,
+    0.13808375597000122,
+    0.20237581431865692,
+    0.23988081514835358,
+    0.1104152575135231,
+    0.015223409980535507,
+    0.12160832434892654,
+    0.055425502359867096,
+    0.21718139946460724
+  ]
+}
