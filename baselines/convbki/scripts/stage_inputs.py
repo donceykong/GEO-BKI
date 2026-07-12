@@ -335,6 +335,23 @@ def stage(config_path: str, data_root_override: str | None = None) -> int:
     # (no common->SemKITTI canonical hop). Default False preserves Option A.
     native_common = bool(cfg.get("native_common", False))
 
+    # pred_format: how the input prediction files are encoded.
+    #   "softmax"     (default) — CENet uint16 (float16) per-channel softmax;
+    #                 K inferred from file size, routed source->common.
+    #   "hard_labels" — Invascal (lidarrv) hard predictions: one uint32 RAW
+    #                 dataset label per point (kitti360 raw for lidarrv_kitti360,
+    #                 mcd raw for lidarrv_mcd). Mapped raw->common via
+    #                 <inferred_labels_key>_to_common (the per-dataset collapse),
+    #                 exactly the pipeline the lead specified. No softmax, no
+    #                 channel routing. Requires native_common (9-class common).
+    pred_format = str(cfg.get("pred_format", "softmax"))
+    if pred_format not in ("softmax", "hard_labels"):
+        print(f"ERROR: unknown pred_format {pred_format!r} (softmax|hard_labels)")
+        return 2
+    if pred_format == "hard_labels" and not native_common:
+        print("ERROR: pred_format=hard_labels requires native_common: true")
+        return 2
+
     LM.load_semkitti_config(nbki_root)
     common_cfg = LM.load_common_config(common_yaml)
     LM.build_semkitti_train_to_common(common_cfg)
@@ -342,6 +359,16 @@ def stage(config_path: str, data_root_override: str | None = None) -> int:
         raw_to_label_lut = LM.build_raw_gt_to_common(gt_key, common_cfg)
     else:
         raw_to_label_lut = LM.build_raw_gt_to_semkitti_train(gt_key, common_cfg)
+
+    # For hard_labels input, the prediction is a raw dataset label collapsed to
+    # common with the SAME per-dataset map used for GT — but keyed on the
+    # inferred_labels_key (the model that produced the prediction), which may
+    # differ from gt_key (OOD combos: cross-dataset input vs native GT).
+    pred_raw_to_common_lut = (
+        LM.build_raw_gt_to_common(inferred_key, common_cfg)
+        if pred_format == "hard_labels"
+        else None
+    )
 
     # Channel count differs per CENet variant; learn it from the first
     # softmax file we encounter. We carry the channel->common routing
@@ -434,48 +461,67 @@ def stage(config_path: str, data_root_override: str | None = None) -> int:
             continue
         gt_train.astype(np.uint32).tofile(os.path.join(out_lbl, f"{stem}.label"))
 
-        # CENet softmax -> SemKITTI 20-class soft probs
-        if channel_to_common is None:
-            raw_pred = np.fromfile(in_pred, dtype=np.uint16)
-            if raw_pred.size == 0 or raw_pred.size % n_pts != 0:
+        if pred_format == "hard_labels":
+            # Invascal (lidarrv) hard prediction: one uint32 RAW dataset label
+            # per point. Mask & 0xFFFF (parity with the GT read; a no-op for the
+            # small raw label ids in practice) then collapse raw->common with the
+            # inferred_labels_key's per-dataset map. This is the whole prediction
+            # side for Invascal — no softmax, no channel routing.
+            raw_pred = np.fromfile(in_pred, dtype=np.uint32) & 0xFFFF
+            if raw_pred.size != n_pts:
                 manifest["skipped"].append(
-                    {"stem": stem, "reason": f"pred_size={raw_pred.size}, n_pts={n_pts}"}
+                    {"stem": stem, "reason": f"pred_size={raw_pred.size} vs scan_pts={n_pts}"}
                 )
                 pose_rows.pop()
                 staged_stems.pop()
                 os.remove(out_scan)
                 os.remove(os.path.join(out_lbl, f"{stem}.label"))
                 continue
-            K = raw_pred.size // n_pts
-            channel_to_common = LM.build_source_channel_to_common(
-                inferred_key, common_cfg, K
-            )
-            manifest["n_channels"] = int(K)
-            print(f"Inferred K={K} channels from first CENet file; built routing table")
+            hard_out = pred_raw_to_common_lut[raw_pred]
+            hard_out.astype(np.uint32).tofile(os.path.join(out_hard, f"{stem}.label"))
+        else:
+            # CENet softmax -> SemKITTI 20-class soft probs
+            if channel_to_common is None:
+                raw_pred = np.fromfile(in_pred, dtype=np.uint16)
+                if raw_pred.size == 0 or raw_pred.size % n_pts != 0:
+                    manifest["skipped"].append(
+                        {"stem": stem, "reason": f"pred_size={raw_pred.size}, n_pts={n_pts}"}
+                    )
+                    pose_rows.pop()
+                    staged_stems.pop()
+                    os.remove(out_scan)
+                    os.remove(os.path.join(out_lbl, f"{stem}.label"))
+                    continue
+                K = raw_pred.size // n_pts
+                channel_to_common = LM.build_source_channel_to_common(
+                    inferred_key, common_cfg, K
+                )
+                manifest["n_channels"] = int(K)
+                print(f"Inferred K={K} channels from first CENet file; built routing table")
 
-        if write_softmax:
-            try:
-                pred20 = convert_softmax(in_pred, n_pts, channel_to_common, num_train_classes=20)
-            except ValueError as e:
-                manifest["skipped"].append({"stem": stem, "reason": str(e)})
-                pose_rows.pop()
-                staged_stems.pop()
-                os.remove(out_scan)
-                os.remove(os.path.join(out_lbl, f"{stem}.label"))
-                continue
-            pred20.astype(np.float32).tofile(os.path.join(out_pred, f"{stem}.label"))
+            if write_softmax:
+                try:
+                    pred20 = convert_softmax(in_pred, n_pts, channel_to_common, num_train_classes=20)
+                except ValueError as e:
+                    manifest["skipped"].append({"stem": stem, "reason": str(e)})
+                    pose_rows.pop()
+                    staged_stems.pop()
+                    os.remove(out_scan)
+                    os.remove(os.path.join(out_lbl, f"{stem}.label"))
+                    continue
+                pred20.astype(np.float32).tofile(os.path.join(out_pred, f"{stem}.label"))
 
-        # Hard labels: 9-class common argmax routed via canonical (no split).
-        # Re-derive from CENet softmax instead of pred20 because pred20 has the
-        # weighted split applied, which makes vegetation/vehicle never win argmax.
-        raw_u16 = np.fromfile(in_pred, dtype=np.uint16).reshape(n_pts, -1)
-        soft = LM.softmax_from_float16_raw(raw_u16)
-        common = LM.aggregate_source_to_common(soft, channel_to_common, n_common=9)
-        common_argmax = common.argmax(axis=1).astype(np.uint32)
-        # native_common: keep the 9-class common argmax as the hard label.
-        # Otherwise route to a single canonical SemKITTI training class (Option A).
-        hard_out = common_argmax if native_common else common_to_train_canon[common_argmax]
-        hard_out.astype(np.uint32).tofile(os.path.join(out_hard, f"{stem}.label"))
+            # Hard labels: 9-class common argmax routed via canonical (no split).
+            # Re-derive from CENet softmax instead of pred20 because pred20 has the
+            # weighted split applied, which makes vegetation/vehicle never win argmax.
+            raw_u16 = np.fromfile(in_pred, dtype=np.uint16).reshape(n_pts, -1)
+            soft = LM.softmax_from_float16_raw(raw_u16)
+            common = LM.aggregate_source_to_common(soft, channel_to_common, n_common=9)
+            common_argmax = common.argmax(axis=1).astype(np.uint32)
+            # native_common: keep the 9-class common argmax as the hard label.
+            # Otherwise route to a single canonical SemKITTI training class (Option A).
+            hard_out = common_argmax if native_common else common_to_train_canon[common_argmax]
+            hard_out.astype(np.uint32).tofile(os.path.join(out_hard, f"{stem}.label"))
 
         manifest["staged"].append({"stem": stem, "n_points": int(n_pts)})
 

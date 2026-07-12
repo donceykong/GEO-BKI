@@ -1,0 +1,49 @@
+# Conv-BKI eval config: KITTI-360 seq 0009, OOD input, INVASCAL (lidarrv) preds.
+#
+# Mirror of kitti360_seq0000_ood_invascal.yaml for seq 0009. OOD = KITTI-360 scans
+# through the MCD-trained Invascal model (lidarrv_mcd). Predictions are HARD uint32
+# RAW MCD labels (0..29); pred_format:hard_labels collapses raw->common via
+# mcd_to_common (inferred_labels_key: mcd) — the cross-dataset input map — while GT
+# stays KITTI-360 (gt_labels_key: kitti360). Kernel = kitti360_9class_gt (the eval
+# dataset's kernel). Evaluated on all GT scans (ungated).
+
+experiment_name: kitti360_seq0009_ood_invascal
+
+dataset: kitti360
+sequence_name: 2013_05_28_drive_0009_sync
+data_root: null
+
+input_data_suffix: velodyne_points/data
+lidar_pose_suffix: velodyne_poses.txt
+input_label_suffix: inferred_labels/lidarrv_mcd/predicted_labels
+gt_label_suffix: gt_labels
+
+inferred_labels_key: mcd          # Invascal model trained on MCD taxonomy
+gt_labels_key: kitti360           # GT is KITTI-360 taxonomy
+
+calibration_file: ""
+
+native_common: true
+pred_format: hard_labels
+
+staging_root: /home/sandilya/convbki_train_workspace/eval/kitti360_seq0009_ood_invascal/staging
+output_root: /home/sandilya/convbki_train_workspace/eval/kitti360_seq0009_ood_invascal/nbki_runs
+log_dir: baselines/convbki/logs
+
+weights:
+  path: baselines/convbki/Weights/kitti360_9class_gt/filters5.pt
+
+grid:
+  grid_size: [501, 501, 27]
+  min_bound: [-50.1, -50.1, -2.7]
+  max_bound: [50.1, 50.1, 2.7]
+
+num_classes: 9
+hard_input: true
+filter_size: 5
+kernel: sparse
+per_class: true
+compound: false
+ell: 0.5
+seed: 42
+device: cuda

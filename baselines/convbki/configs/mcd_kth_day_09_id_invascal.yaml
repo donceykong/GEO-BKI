@@ -1,0 +1,60 @@
+# Conv-BKI eval config: MCD kth_day_09, ID input, INVASCAL (lidarrv) preds.
+#
+# ID = MCD (kth) scans through the MCD-trained Invascal model (lidarrv_mcd).
+# Predictions are HARD uint32 RAW MCD labels (0..29); pred_format:hard_labels
+# collapses raw->common via mcd_to_common (inferred_labels_key: mcd). GT is MCD
+# gt_labels_terrain (gt_labels_key: mcd, terrain at raw 29).
+#
+# Kernel: GT-retrained native-9-class MCD kernel (Weights/mcd_9class_gt).
+#
+# MCD path notes:
+#   - sequence_name carries the group subdir (kth/kth_day_09) so seq_root resolves
+#     to <data_root>/mcd/kth/kth_day_09 (the actual on-disk layout).
+#   - calibration_file is the kth hhs extrinsic at <data_root>/mcd/kth/hhs_calib.yaml
+#     (NOT <data_root>/mcd/hhs_calib.yaml, which does not exist).
+#   - scans lidar_bin/data, poses pose_inW.csv (body->world quat CSV),
+#     lidar->world = body_to_world @ inv(body_to_lidar).
+# Evaluated on all GT scans (ungated; kth evaluations/ holds an EBS baseline
+# keyframe set, not the S-BKI set the plan references, and there is no earlier
+# MCD retrained run to match — see report).
+
+experiment_name: mcd_kth_day_09_id_invascal
+
+dataset: mcd
+sequence_name: kth/kth_day_09
+data_root: null
+
+input_data_suffix: lidar_bin/data
+lidar_pose_suffix: pose_inW.csv
+input_label_suffix: inferred_labels/lidarrv_mcd/predicted_labels
+gt_label_suffix: gt_labels_terrain
+
+inferred_labels_key: mcd
+gt_labels_key: mcd
+
+calibration_file: ${OSM_BKI_DATA_ROOT}/mcd/kth/hhs_calib.yaml
+
+native_common: true
+pred_format: hard_labels
+
+staging_root: /home/sandilya/convbki_train_workspace/eval/mcd_kth_day_09_id_invascal/staging
+output_root: /home/sandilya/convbki_train_workspace/eval/mcd_kth_day_09_id_invascal/nbki_runs
+log_dir: baselines/convbki/logs
+
+weights:
+  path: baselines/convbki/Weights/mcd_9class_gt/filters5.pt
+
+grid:
+  grid_size: [501, 501, 27]
+  min_bound: [-50.1, -50.1, -2.7]
+  max_bound: [50.1, 50.1, 2.7]
+
+num_classes: 9
+hard_input: true
+filter_size: 5
+kernel: sparse
+per_class: true
+compound: false
+ell: 0.5
+seed: 42
+device: cuda
