@@ -22,6 +22,7 @@ from __future__ import annotations
 
 import argparse
 import os
+import resource
 import sys
 import time
 
@@ -167,6 +168,46 @@ def main(config_path: str, hard: bool = False, limit: int | None = None) -> int:
         print("ERROR: no scans found in staging_root", file=sys.stderr)
         return 2
 
+    # ------------------------------------------------------------------ #
+    # Keyframe / query-at-end mode
+    # ------------------------------------------------------------------ #
+    # keyframe_query_at_end: build the map over the keyframe set (propagate +
+    # update_map only, no per-scan labeling), then query ONCE at the end at the
+    # same keyframe set. This mirrors the offline global-map eval the other
+    # baselines use, and matches S-BKI. It is a SEMANTIC change from the default
+    # per-scan online path: each keyframe is labeled against the FULL finished
+    # map (including scans that come AFTER it), not just the map-so-far.
+    kf_query_at_end = bool(cfg.get("keyframe_query_at_end", False))
+    kf_spacing = float(cfg.get("keyframe_spacing", 5.0))
+    kf_indices: list[int] | None = None
+    if kf_query_at_end:
+        kf_file = cfg.get("keyframe_stems_file") or os.path.join(
+            staging_root, f"keyframes_{kf_spacing:g}m.txt"
+        )
+        kf_file = os.path.expandvars(kf_file)
+        if not os.path.isfile(kf_file):
+            print(f"ERROR: keyframe_query_at_end set but keyframe file missing: {kf_file}",
+                  file=sys.stderr)
+            return 2
+        with open(kf_file) as f:
+            kf_stems = {ln.strip() for ln in f if ln.strip()}
+        # Intersect with the staged dataset, preserving dataset order (which is
+        # stem-sorted); keyframes on scans that were not staged (missing GT/pred)
+        # are silently dropped.
+        kf_indices = [i for i in range(len(ds)) if ds.stem_for_index(i) in kf_stems]
+        print(f"  keyframe mode = ON (query-at-end, {kf_spacing:g} m spacing)")
+        print(f"  keyframe file = {kf_file}")
+        print(f"  keyframes     = {len(kf_stems)} in file, {len(kf_indices)} staged (build==query set)")
+        if len(kf_indices) == 0:
+            print("ERROR: no keyframe stems intersect the staged set", file=sys.stderr)
+            return 2
+
+    # Disable garbage collection in keyframe/query-at-end mode so the map
+    # persists over the whole sequence (default delete_time=10 would prune the
+    # map to a rolling ~10-frame window, and end-querying an early keyframe would
+    # return all-prior/ignore). A per-scan run keeps the default rolling window.
+    delete_time = (len(ds) + 10) if kf_query_at_end else 10
+
     map_object = GlobalMap(
         torch.tensor(grid_size, dtype=torch.long).to(device),
         torch.tensor(min_bound).to(device),
@@ -176,19 +217,74 @@ def main(config_path: str, hard: bool = False, limit: int | None = None) -> int:
         num_classes=num_classes,
         ignore_labels=[0],
         device=device,
+        delete_time=delete_time,
     )
+    print(f"  delete_time  = {delete_time}{' (GC disabled for persistent map)' if kf_query_at_end else ''}")
 
     out_preds = os.path.join(output_root, "sequences", "00", "predictions")
     os.makedirs(out_preds, exist_ok=True)
 
+    def peak_rss_gb() -> float:
+        # ru_maxrss is KiB on Linux.
+        return resource.getrusage(resource.RUSAGE_SELF).ru_maxrss / (1024.0 * 1024.0)
+
+    t0 = time.time()
+    written = 0
+
+    if kf_query_at_end:
+        # -------------------------------------------------------------- #
+        # Two-pass keyframe / query-at-end
+        # -------------------------------------------------------------- #
+        # BUILD pass: fold every keyframe into ONE persistent map (GC disabled),
+        # no labeling. reset_grid ONCE up front; all keyframes are one sequence,
+        # and we must NOT reset between build and query so the finished map
+        # survives into the query pass.
+        map_object.reset_grid()
+        n_kf = len(kf_indices)
+        for j, idx in enumerate(kf_indices):
+            with torch.no_grad():
+                pose, points, pred_labels, _gt, _sid, _fid = ds.get_test_item(idx, get_gt=False)
+                map_object.propagate(pose)
+                labeled_pc = np.hstack((points, pred_labels))
+                labeled_pc_t = torch.from_numpy(labeled_pc).to(device=device, non_blocking=True)
+                map_object.update_map(labeled_pc_t)
+            if (j + 1) % 50 == 0 or j + 1 == n_kf:
+                el = time.time() - t0
+                gm = 0 if map_object.global_map is None else map_object.global_map.shape[0]
+                print(f"  [build {j + 1}/{n_kf}] rate={(j + 1) / max(el, 1e-9):.2f} kf/s "
+                      f"map_cells={gm} rss={peak_rss_gb():.2f}GB elapsed={el:.1f}s")
+
+        gm = 0 if map_object.global_map is None else map_object.global_map.shape[0]
+        print(f"  BUILD done: {n_kf} keyframes, map_cells={gm}, "
+              f"peak_rss={peak_rss_gb():.2f}GB, build_time={time.time() - t0:.1f}s")
+
+        # QUERY pass: label each keyframe against the FINISHED map. No reset, no
+        # further update_map — propagate re-windows the persistent map to each
+        # keyframe's pose.
+        tq = time.time()
+        for j, idx in enumerate(kf_indices):
+            with torch.no_grad():
+                pose, points, _pred, _gt, _sid, _fid = ds.get_test_item(idx, get_gt=False)
+                map_object.propagate(pose)
+                predictions, _local_mask = map_object.label_points(points)
+                preds_np = predictions.detach().cpu().numpy().astype(np.uint32)
+                stem = ds.stem_for_index(idx)
+                preds_np.tofile(os.path.join(out_preds, f"{stem}.label"))
+                written += 1
+            if (j + 1) % 50 == 0 or j + 1 == n_kf:
+                el = time.time() - tq
+                print(f"  [query {j + 1}/{n_kf}] rate={(j + 1) / max(el, 1e-9):.2f} kf/s elapsed={el:.1f}s")
+
+        print(f"Done: wrote {written} prediction files to {out_preds}")
+        print(f"Total time: {time.time() - t0:.1f}s  peak_rss={peak_rss_gb():.2f}GB")
+        return 0
+
     # ------------------------------------------------------------------ #
-    # Inference loop
+    # Default per-scan online inference loop (unchanged)
     # ------------------------------------------------------------------ #
     map_object.reset_grid()
     current_scene = None
     current_frame_id = None
-    t0 = time.time()
-    written = 0
 
     end = len(ds) if limit is None else min(len(ds), int(limit))
     for idx in range(end):

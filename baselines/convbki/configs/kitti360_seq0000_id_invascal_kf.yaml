@@ -1,0 +1,53 @@
+# Conv-BKI eval config: kitti360_seq0000_id, INVASCAL preds, KEYFRAME query-at-end (5.0 m).
+#
+# Same inputs/kernel/staging as the ungated per-scan kitti360_seq0000_id_invascal.yaml, but:
+#   - keyframe_query_at_end: true -> build map over the 5.0 m keyframe set
+#     (propagate+update only), then query ONCE at the end at the same keyframes.
+#   - reuses the existing staging_root (staged inputs + keyframes_5m.txt).
+#   - separate output_root so the per-scan run is preserved.
+# NOTE: offline/batch eval — each keyframe sees the FULL finished map (incl.
+# later scans), unlike the causal per-scan path.
+
+experiment_name: kitti360_seq0000_id_invascal_kf
+
+dataset: kitti360
+sequence_name: 2013_05_28_drive_0000_sync
+data_root: null
+
+input_data_suffix: velodyne_points/data
+lidar_pose_suffix: velodyne_poses.txt
+input_label_suffix: inferred_labels/lidarrv_kitti360/predicted_labels
+gt_label_suffix: gt_labels
+
+inferred_labels_key: kitti360
+gt_labels_key: kitti360
+
+calibration_file: ""
+
+native_common: true
+pred_format: hard_labels
+
+keyframe_query_at_end: true
+keyframe_spacing: 5.0
+
+staging_root: /home/sandilya/convbki_train_workspace/eval/kitti360_seq0000_id_invascal/staging
+output_root: /home/sandilya/convbki_train_workspace/eval/kitti360_seq0000_id_invascal_kf/nbki_runs
+log_dir: /home/sandilya/convbki_train_workspace/eval/kf_logs
+
+weights:
+  path: baselines/convbki/Weights/kitti360_9class_gt/filters5.pt
+
+grid:
+  grid_size: [501, 501, 27]
+  min_bound: [-50.1, -50.1, -2.7]
+  max_bound: [50.1, 50.1, 2.7]
+
+num_classes: 9
+hard_input: true
+filter_size: 5
+kernel: sparse
+per_class: true
+compound: false
+ell: 0.5
+seed: 42
+device: cuda

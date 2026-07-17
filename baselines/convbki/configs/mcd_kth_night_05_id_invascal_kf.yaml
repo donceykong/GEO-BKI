@@ -1,0 +1,53 @@
+# Conv-BKI eval config: mcd_kth_night_05_id, INVASCAL preds, KEYFRAME query-at-end (5.0 m).
+#
+# Same inputs/kernel/staging as the ungated per-scan mcd_kth_night_05_id_invascal.yaml, but:
+#   - keyframe_query_at_end: true -> build map over the 5.0 m keyframe set
+#     (propagate+update only), then query ONCE at the end at the same keyframes.
+#   - reuses the existing staging_root (staged inputs + keyframes_5m.txt).
+#   - separate output_root so the per-scan run is preserved.
+# NOTE: offline/batch eval — each keyframe sees the FULL finished map (incl.
+# later scans), unlike the causal per-scan path.
+
+experiment_name: mcd_kth_night_05_id_invascal_kf
+
+dataset: mcd
+sequence_name: kth/kth_night_05
+data_root: null
+
+input_data_suffix: lidar_bin/data
+lidar_pose_suffix: pose_inW.csv
+input_label_suffix: inferred_labels/lidarrv_mcd/predicted_labels
+gt_label_suffix: gt_labels_terrain
+
+inferred_labels_key: mcd
+gt_labels_key: mcd
+
+calibration_file: ${OSM_BKI_DATA_ROOT}/mcd/kth/hhs_calib.yaml
+
+native_common: true
+pred_format: hard_labels
+
+keyframe_query_at_end: true
+keyframe_spacing: 5.0
+
+staging_root: /home/sandilya/convbki_train_workspace/eval/mcd_kth_night_05_id_invascal/staging
+output_root: /home/sandilya/convbki_train_workspace/eval/mcd_kth_night_05_id_invascal_kf/nbki_runs
+log_dir: /home/sandilya/convbki_train_workspace/eval/kf_logs
+
+weights:
+  path: baselines/convbki/Weights/mcd_9class_gt/filters5.pt
+
+grid:
+  grid_size: [501, 501, 27]
+  min_bound: [-50.1, -50.1, -2.7]
+  max_bound: [50.1, 50.1, 2.7]
+
+num_classes: 9
+hard_input: true
+filter_size: 5
+kernel: sparse
+per_class: true
+compound: false
+ell: 0.5
+seed: 42
+device: cuda
